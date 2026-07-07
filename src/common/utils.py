@@ -53,3 +53,32 @@ def get_device():
     if torch.cuda.is_available():
         return torch.device("cuda")
     return torch.device("cpu")
+
+def save_video(frames, path, fps=8):
+    """Save tensor or numpy frames as a video file."""
+    import cv2
+    if isinstance(frames, torch.Tensor):
+        frames = (frames.cpu().numpy() * 255).astype(np.uint8)
+    frames = np.clip(frames, 0, 255).astype(np.uint8)
+    if frames.ndim == 4:
+        _, h, w, c = frames.shape
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(path, fourcc, fps, (w, h))
+        for f in frames:
+            out.write(cv2.cvtColor(f, cv2.COLOR_RGB2BGR))
+        out.release()
+
+def load_video(path, num_frames=None):
+    """Load video file and return numpy array."""
+    import cv2
+    cap = cv2.VideoCapture(path)
+    frames = []
+    while True:
+        r, f = cap.read()
+        if not r: break
+        frames.append(f)
+    cap.release()
+    if num_frames and len(frames) > num_frames:
+        step = len(frames) // num_frames
+        frames = [frames[i] for i in range(0, len(frames), step)][:num_frames]
+    return np.stack(frames)

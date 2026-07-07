@@ -64,8 +64,9 @@ class CrossModalRetriever(BaseRetriever):
         
         return RetrievalResult(
             query_embedding=torch.cat([v for v in query_dict.values() if v is not None], dim=-1),
-            retrieved_indices=[indices[sorted_idx].tolist()],
+            retrieved_indices=[sorted_idx.tolist()],
             retrieved_scores=[fused_scores[sorted_idx].tolist()],
+            retrieved_metadata=[[]],
         )
 
     def save_index(self, path):
