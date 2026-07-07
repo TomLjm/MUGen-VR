@@ -11,12 +11,12 @@ from .modality_dropout import ModalityDropout
 class HierarchicalConditionFusion(nn.Module):
     """
     Innovation A: Hierarchical multi-modal condition fusion.
-    
+
     Architecture:
         1. Project each modality to a unified space
         2. Hierarchical gating at multiple levels
         3. Cross-attention fusion for final representation
-    
+
     The hierarchy:
         - Low level: emphasizes image/appearance features
         - Mid level: emphasizes audio/rhythm features
@@ -25,21 +25,26 @@ class HierarchicalConditionFusion(nn.Module):
 
     def __init__(
         self,
-        dims={"text": 768, "image": 1024, "audio": 512},
+        dims=None,
         hidden_dim=768,
         num_heads=8,
         dropout=0.1,
         modality_dropout=0.2,
     ):
         super().__init__()
+        if dims is None:
+            dims = {"text": 768, "image": 1024, "audio": 512}
+        self.modality_order = list(dims.keys())
+        self.num_modalities = len(dims)
+
         self.projectors = nn.ModuleDict({
             mod: ModalityProjector(dim, hidden_dim)
             for mod, dim in dims.items()
         })
-        self.hierarchical_gating = HierarchicalGating(hidden_dim, len(dims))
+        self.hierarchical_gating = HierarchicalGating(hidden_dim, self.num_modalities)
         self.cross_attention = CrossAttentionFusion(hidden_dim, num_heads)
-        self.modality_dropout = ModalityDropout(modality_dropout, len(dims))
-        self.output_proj = nn.Linear(hidden_dim * 3, hidden_dim)  # combine 3 layers
+        self.modality_dropout = ModalityDropout(modality_dropout, self.num_modalities)
+        self.output_proj = nn.Linear(hidden_dim * 3, hidden_dim)
 
     def forward(self, modality_inputs, return_weights=False):
         """
@@ -48,36 +53,48 @@ class HierarchicalConditionFusion(nn.Module):
         Returns:
             fused: [B, D] fused embedding
         """
-        # Project to unified space
-        projected = {}
+        B = None
         for mod, (emb, mask) in modality_inputs.items():
             if emb is not None:
-                projected[mod] = self.projectors[mod](emb)
+                B = emb.size(0)
+                break
 
-        # Apply modality dropout in training
+        # Project to unified space
+        projected = {}
+        for mod in self.modality_order:
+            item = modality_inputs.get(mod)
+            if item is not None:
+                emb, mask = item
+                if emb is not None:
+                    projected[mod] = self.projectors[mod](emb)
+
+        # Apply modality dropout
         projected = self.modality_dropout(projected)
-
-        # Filter None
         projected = {k: v for k, v in projected.items() if v is not None}
 
         if len(projected) == 0:
-            return torch.zeros(1, self.output_proj.in_features)
+            return torch.zeros(1, 768)
 
-        emb_list = list(projected.values())
+        # Pad missing modalities with zeros for gating
+        D = next(iter(projected.values())).size(-1)
+        device = next(iter(projected.values())).device
+        emb_list = []
+        for mod in self.modality_order:
+            if mod in projected:
+                emb_list.append(projected[mod])
+            else:
+                emb_list.append(torch.zeros(B, D, device=device))
 
-        # Hierarchical gating
         layer_outputs, layer_weights = self.hierarchical_gating(emb_list)
-        
+
         # Combine hierarchical outputs
-        B = emb_list[0].size(0)
-        combined = layer_outputs.permute(1, 0, 2).reshape(B, -1)  # [B, L*D]
+        combined = layer_outputs.permute(1, 0, 2).reshape(B, -1)
         combined = self.output_proj(combined)
 
         # Stack for cross-attention
         stacked = torch.stack(emb_list, dim=1)
         fused = self.cross_attention(stacked)
 
-        # Final combination
         output = (combined + fused) / 2
 
         if return_weights:
