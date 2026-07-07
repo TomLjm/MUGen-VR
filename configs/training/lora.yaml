@@ -1,0 +1,18 @@
+# LoRA 微调配置
+model:
+  base: stabilityai/stable-video-diffusion-img2vid
+  lora:
+    rank: 16
+    alpha: 32
+    target_modules: [q_proj, k_proj, v_proj, out_proj]
+  condition_embed_dim: 768
+
+training:
+  batch_size: 4
+  learning_rate: 5e-5
+  max_steps: 10000
+  gradient_accumulation_steps: 4
+  mixed_precision: fp16
+
+data:
+  num_workers: 2

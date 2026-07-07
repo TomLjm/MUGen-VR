@@ -1,0 +1,13 @@
+# VBench 评测配置
+evaluator: VBench
+dimensions:
+  - subject_consistency
+  - motion_smoothness
+  - temporal_quality
+  - aesthetic_quality
+  - imaging_quality
+  - object_class
+  - multiple_objects
+
+batch_size: 8
+num_workers: 4

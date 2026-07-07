@@ -1,0 +1,28 @@
+# Third-party code (all of it)
+third_party/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.env/
+
+# Outputs
+outputs/
+*.mp4
+*.avi
+*.webm
+
+# Temp
+tmp/
+*.tmp
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/

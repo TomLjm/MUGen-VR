@@ -1,0 +1,22 @@
+# 数据配置
+data_root: ./data
+dataset: webvid
+
+video:
+  clip_duration: 8
+  fps: 8
+  resolution: 256
+  sample_stride: 1
+
+audio:
+  sample_rate: 16000
+  extract: true
+
+keyframes:
+  method: uniform
+  num_frames: 8
+
+cache:
+  enabled: true
+  feature_dir: ./cache/features
+  metadata_path: ./cache/metadata.json

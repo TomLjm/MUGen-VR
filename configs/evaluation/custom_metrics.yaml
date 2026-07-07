@@ -1,0 +1,17 @@
+# 自定义评测指标
+metrics:
+  retrieval:
+    - recall@1
+    - recall@5
+    - recall@10
+    - mrr
+
+  alignment:
+    text_video: [clip_similarity, bert_score]
+    image_video: [cosine_similarity]
+    audio_video: [clap_similarity]
+
+  robustness:
+    noise_text: [0.0, 0.1, 0.3, 0.5]
+    blur_image: [0.0, 5.0, 10.0, 20.0]
+    noise_audio: [0.0, 0.01, 0.05, 0.1]

@@ -1,0 +1,4 @@
+-r base.txt
+lpips>=0.1
+clean-fid>=0.1
+pytorch-fid>=0.3
