@@ -47,6 +47,25 @@ def test_decode_video_contract_is_channel_first_before_batching(monkeypatch):
     assert result.shape == (1, 7, 16, 2, 3)
 
 
+def test_encode_latents_accepts_ddp_style_transformer_wrapper(monkeypatch):
+    monkeypatch.setattr(MODULE, "decode_video", lambda *args, **kwargs: torch.zeros(3, 5, 8, 8))
+
+    class Inner:
+        dtype = torch.bfloat16
+
+    class Wrapped:
+        module = Inner()
+
+    class Pipeline:
+        transformer = Wrapped()
+
+        def encode_video(self, videos, height, width):
+            return torch.zeros(1, 2, 16, 1, 1)
+
+    result = MODULE.encode_latents(Pipeline(), [{"video_path": "unused"}], [0], 5, 8, 8, "cpu")
+    assert result.dtype == torch.bfloat16
+
+
 def test_training_script_does_not_save_frozen_accelerator_model_state():
     source = SCRIPT.read_text(encoding="utf-8")
     assert "accelerator.save_state" not in source

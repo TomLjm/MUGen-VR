@@ -147,7 +147,13 @@ def encode_latents(pipeline, records, indices, num_frames, height, width, device
         [decode_video(records[index]["video_path"], num_frames, height, width) for index in indices]
     ).permute(0, 2, 1, 3, 4).to(device)
     with torch.no_grad():
-        return pipeline.encode_video(videos, height=height, width=width).to(pipeline.transformer.dtype)
+        transformer = pipeline.transformer
+        transformer_dtype = getattr(transformer, "dtype", None)
+        if transformer_dtype is None and hasattr(transformer, "module"):
+            transformer_dtype = transformer.module.dtype
+        if transformer_dtype is None:
+            raise AttributeError("prepared AnyFlow transformer does not expose dtype")
+        return pipeline.encode_video(videos, height=height, width=width).to(transformer_dtype)
 
 
 def forward_loss(
