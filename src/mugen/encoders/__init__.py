@@ -8,3 +8,7 @@ __all__ = [
     "BaseEncoder", "TextEncoder", "ImageEncoder",
     "AudioEncoder", "VideoEncoder",
 ]
+from .imagebind_encoder import ImageBindEncoder
+from .internvideo_encoder import InternVideoEncoder
+
+__all__ = ["ImageBindEncoder", "InternVideoEncoder"]

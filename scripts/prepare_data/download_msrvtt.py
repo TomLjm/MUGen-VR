@@ -13,7 +13,11 @@ from mugen.data.manifest import read_jsonl, sha256_file, write_jsonl
 
 
 def run(command):
-    return subprocess.run(command, check=True, capture_output=True, text=True)
+    try:
+        return subprocess.run(command, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or str(exc)).strip()
+        raise RuntimeError(detail[-4000:]) from exc
 
 
 def probe(path: Path):
