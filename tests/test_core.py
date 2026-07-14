@@ -14,6 +14,7 @@ from mugen.retrieval.feature_index import FeatureIndex
 from mugen.retrieval.retriever import CrossModalRetriever
 from mugen.data.feature_store import FeatureShardWriter, load_feature_store
 from mugen.data.manifest import validate_split_isolation
+from mugen.training.losses import gate_balance_loss, symmetric_info_nce
 
 
 def test_feature_index_save_load_search_consistency():
@@ -132,3 +133,17 @@ def test_real_feature_store_round_trip():
     assert tensors["text"].shape == (2, 4)
     assert len(records) == 2
     assert manifest["rows"] == 2
+
+
+def test_symmetric_info_nce_prefers_matching_pairs():
+    target = torch.eye(4)
+    good, _ = symmetric_info_nce(target, target)
+    bad, _ = symmetric_info_nce(target.flip(0), target)
+    assert good < bad
+
+
+def test_gate_balance_penalizes_collapsed_weights():
+    balanced = torch.full((3, 2, 4), 0.25)
+    collapsed = torch.zeros(3, 2, 4)
+    collapsed[..., 0] = 1.0
+    assert gate_balance_loss(balanced) < gate_balance_loss(collapsed)
