@@ -7,7 +7,7 @@ from PIL import Image
 from torchvision import transforms
 
 from ..base import BaseVideoGenerator
-from ...common.interfaces import GenerationResult
+from ...common.interfaces import ConditionBundle, GenerationResult
 
 
 class AnyFlowVideoGenerator(BaseVideoGenerator):
@@ -33,6 +33,7 @@ class AnyFlowVideoGenerator(BaseVideoGenerator):
         self.width = width
         self.num_inference_steps = num_inference_steps
         self.pipeline = None
+        self.load_error = None
         self._load_pipeline()
 
     def _load_pipeline(self):
@@ -43,7 +44,7 @@ class AnyFlowVideoGenerator(BaseVideoGenerator):
             self.pipeline.to(self.device)
             print(f"[AnyFlow] Loaded from {self.model_id}")
         except Exception as exc:
-            print(f"[AnyFlow] Load failed: {exc}")
+            self.load_error = exc
             self.pipeline = None
 
     def _preprocess_image(self, image, height=None, width=None):
@@ -53,35 +54,45 @@ class AnyFlowVideoGenerator(BaseVideoGenerator):
         frame = transform(image.convert("RGB"))
         return frame.unsqueeze(0).unsqueeze(0).to(device=self.device, dtype=self.dtype)
 
-    def _prompt_from_conditions(self, conditions):
-        prompt = conditions.get("prompt")
-        if prompt and isinstance(prompt, str):
-            return prompt
-        return "a dynamic scene with natural motion"
-
     @torch.no_grad()
-    def generate(self, conditions, **kwargs):
+    def generate(self, conditions: ConditionBundle, **kwargs):
+        if not isinstance(conditions, ConditionBundle):
+            raise TypeError("AnyFlowVideoGenerator.generate requires a ConditionBundle")
+        conditions.validate()
         if self.pipeline is None:
-            return self._dummy_generate(conditions)
+            raise RuntimeError(f"AnyFlow pipeline is unavailable: {self.load_error}")
 
-        image = conditions.get("image")
-        if image is None:
-            raise ValueError("AnyFlow-FAR requires conditions['image'] for image-conditioned generation")
-
-        prompt = self._prompt_from_conditions(conditions)
+        prompt = conditions.prompt
         height = kwargs.get("height", self.height)
         width = kwargs.get("width", self.width)
         n_frames = kwargs.get("num_frames", self.num_frames)
         n_steps = kwargs.get("num_inference_steps", self.num_inference_steps)
         seed = kwargs.get("seed")
 
-        video = self._preprocess_image(image, height=height, width=width)
+        video = conditions.reference_video
+        if video is None:
+            video = self._preprocess_image(conditions.image, height=height, width=width)
+        prompt_embeds = conditions.prompt_embeds
+        if conditions.condition_tokens is not None:
+            if prompt_embeds is None:
+                prompt_embeds, _ = self.pipeline.encode_prompt(
+                    prompt=prompt,
+                    negative_prompt=None,
+                    do_classifier_free_guidance=False,
+                    num_videos_per_prompt=1,
+                    prompt_embeds=None,
+                    negative_prompt_embeds=None,
+                    max_sequence_length=512,
+                    device=self.device,
+                )
+            prompt_embeds = conditions.merged_prompt_embeds(prompt_embeds)
         generator = None
         if seed is not None:
             generator = torch.Generator(device=self.device).manual_seed(seed)
 
         output = self.pipeline(
-            prompt=prompt,
+            prompt=None if prompt_embeds is not None else prompt,
+            prompt_embeds=prompt_embeds,
             video=video,
             height=height,
             width=width,
@@ -97,7 +108,13 @@ class AnyFlowVideoGenerator(BaseVideoGenerator):
         video_tensor = self._frames_to_tensor(frames)
         return GenerationResult(
             video_frames=video_tensor,
-            metadata={"model": self.model_id, "num_frames": n_frames, "prompt": prompt, "seed": seed},
+            metadata={
+                "model": self.model_id,
+                "num_frames": n_frames,
+                "prompt": prompt,
+                "seed": seed,
+                "condition_tokens": 0 if conditions.condition_tokens is None else conditions.condition_tokens.shape[1],
+            },
         )
 
     def _frames_to_tensor(self, frames):
@@ -125,7 +142,3 @@ class AnyFlowVideoGenerator(BaseVideoGenerator):
         conditions = kwargs.pop("conditions", {})
         conditions["image"] = image
         return self.generate(conditions, **kwargs)
-
-    def _dummy_generate(self, conditions):
-        frames = torch.randn(25, 3, self.height, self.width).clamp(0, 1)
-        return GenerationResult(video_frames=frames, metadata={"model": "dummy-anyflow"})

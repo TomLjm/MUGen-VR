@@ -4,9 +4,11 @@ import tempfile
 import torch
 
 from mugen.evaluation.vbench_adapter import VBenchAdapter
+from mugen.common.interfaces import ConditionBundle
 from mugen.fusion.fusion_module import HierarchicalConditionFusion
 from mugen.fusion.modality_dropout import ModalityDropout
 from mugen.generation.retrieve_then_generate import RetrieveThenGenerate
+from mugen.generation.conditioner import MultimodalConditioner
 from mugen.retrieval.feature_index import FeatureIndex
 from mugen.retrieval.retriever import CrossModalRetriever
 
@@ -56,6 +58,7 @@ def test_retrieve_then_generate_writes_reference_embedding():
     result = rtg.generate(conditions, allow_dummy=True)
     assert "reference_embedding" in conditions
     assert conditions["reference_embedding"].shape == (1, 4)
+    assert conditions["reference_tokens"].shape == (1, 4, 4)
     assert result.video_frames.shape[0] == 16
 
 
@@ -65,3 +68,36 @@ def test_vbench_unavailable_is_skipped_not_zero():
     assert result.details["status"] in {"skipped", "ok"}
     if result.details["status"] == "skipped":
         assert all(v is None for v in result.metrics.values())
+
+
+def test_condition_bundle_appends_tokens():
+    bundle = ConditionBundle(
+        prompt="test",
+        image=object(),
+        condition_tokens=torch.ones(2, 7, 16),
+    )
+    merged = bundle.merged_prompt_embeds(torch.zeros(2, 5, 16))
+    assert merged.shape == (2, 12, 16)
+    assert torch.all(merged[:, -7:] == 1)
+
+
+def test_multimodal_conditioner_outputs_anyflow_tokens():
+    model = MultimodalConditioner(
+        dims={"text": 8, "image": 8, "audio": 4, "reference": 8},
+        hidden_dim=8,
+        generator_dim=16,
+    )
+    model.eval()
+    bundle = model(
+        prompt="a running dog",
+        image_condition=object(),
+        modality_embeddings={
+            "text": torch.randn(2, 8),
+            "image": torch.randn(2, 8),
+            "audio": torch.randn(2, 4),
+        },
+        reference_embeddings=torch.randn(2, 3, 8),
+        reference_scores=torch.randn(2, 3),
+    )
+    assert bundle.condition_tokens.shape == (2, 7, 16)
+    assert all(bundle.modality_mask.values())

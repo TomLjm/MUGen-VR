@@ -22,9 +22,13 @@ class VBenchAdapter(BaseEvaluator):
             self.available = False
             self.import_error = str(exc)
 
-    def evaluate(self, generated_videos, references=None):
+    def evaluate(self, generated_videos, references=None, required=False):
         self._init_evaluator()
         if not self.available:
+            if required:
+                raise RuntimeError(
+                    f"VBench is required but unavailable: {getattr(self, 'import_error', 'unknown error')}"
+                )
             return EvalResult(
                 metrics={dim: None for dim in self.dimensions},
                 details={"status": "skipped", "reason": getattr(self, "import_error", "VBench unavailable")},
@@ -34,6 +38,8 @@ class VBenchAdapter(BaseEvaluator):
             metrics = getattr(results, "metrics", results)
             return EvalResult(metrics=metrics, details={"status": "ok"})
         except Exception as exc:
+            if required:
+                raise RuntimeError(f"VBench evaluation failed: {exc}") from exc
             return EvalResult(
                 metrics={dim: None for dim in self.dimensions},
                 details={"status": "skipped", "reason": str(exc)},

@@ -7,3 +7,7 @@ __all__ = [
     "VideoGenerator",
     "RetrieveThenGenerate",
 ]
+from .conditioner import MultimodalConditioner
+from .retrieve_then_generate import ReferenceAdapter, RetrieveThenGenerate
+
+__all__ = ["MultimodalConditioner", "ReferenceAdapter", "RetrieveThenGenerate"]

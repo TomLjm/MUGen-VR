@@ -16,6 +16,23 @@ class CustomMetrics(BaseEvaluator):
             details = {"status": "skipped", "reason": "no compatible tensors supplied"}
         return EvalResult(metrics=metrics, details=details)
 
+    def evaluate_video_files(self, paths):
+        from .video_io import decode_video
+
+        per_video = []
+        for path in paths:
+            metrics = self.compute_temporal_metrics(decode_video(path))
+            per_video.append({"path": str(path), **metrics})
+        keys = [key for key in per_video[0] if key != "path"]
+        aggregate = {
+            key: float(sum(row[key] for row in per_video) / len(per_video))
+            for key in keys
+        }
+        return EvalResult(
+            metrics=aggregate,
+            details={"status": "ok", "video_count": len(per_video), "per_video": per_video},
+        )
+
     def compute_retrieval_metrics(self, query_embs, gallery_embs, labels, ks=(1, 5, 10)):
         query_embs = torch.nn.functional.normalize(query_embs.float(), dim=-1)
         gallery_embs = torch.nn.functional.normalize(gallery_embs.float(), dim=-1)

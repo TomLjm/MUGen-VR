@@ -15,6 +15,9 @@ build/
 cache/
 checkpoints/
 models/
+data/
+outputs/
+reports/generated/
 outputs/*.gif
 outputs/*.mp4
 outputs/*.pt
@@ -31,4 +34,6 @@ wandb/
 lightning_logs/
 third_party/*/data/
 third_party/*/pretrained/
+third_party/*
+!third_party/manifest.yaml
 *.incomplete

@@ -7,26 +7,34 @@ from ..retrieval.retriever import CrossModalRetriever
 
 
 class ReferenceAdapter(nn.Module):
-    """Maps retrieved reference video embeddings into generation condition space."""
+    """Converts scored reference embeddings into a fixed token sequence."""
 
-    def __init__(self, dim=768):
+    def __init__(self, dim=768, num_tokens=4):
         super().__init__()
-        self.net = nn.Sequential(nn.Linear(dim, dim), nn.LayerNorm(dim), nn.GELU(), nn.Linear(dim, dim))
+        self.num_tokens = num_tokens
+        self.keys = nn.Linear(dim, dim)
+        self.values = nn.Linear(dim, dim)
+        self.token_queries = nn.Parameter(torch.randn(num_tokens, dim) * (dim ** -0.5))
+        self.output = nn.Sequential(nn.LayerNorm(dim), nn.Linear(dim, dim), nn.GELU())
 
     def forward(self, reference_embeddings, scores=None):
         if reference_embeddings is None or reference_embeddings.numel() == 0:
             return None
         if reference_embeddings.dim() == 2:
             reference_embeddings = reference_embeddings.unsqueeze(0)
-        if scores is None:
-            pooled = reference_embeddings.mean(dim=1)
-        else:
+        batch_size = reference_embeddings.shape[0]
+        score_bias = 0.0
+        if scores is not None:
             scores = torch.as_tensor(scores, dtype=reference_embeddings.dtype, device=reference_embeddings.device)
             if scores.dim() == 1:
                 scores = scores.unsqueeze(0)
-            weights = torch.softmax(scores, dim=-1).unsqueeze(-1)
-            pooled = (reference_embeddings * weights).sum(dim=1)
-        return self.net(pooled)
+            score_bias = torch.log_softmax(scores, dim=-1).unsqueeze(1)
+        queries = self.token_queries.unsqueeze(0).expand(batch_size, -1, -1)
+        keys = self.keys(reference_embeddings)
+        values = self.values(reference_embeddings)
+        logits = torch.matmul(queries, keys.transpose(-1, -2)) * (keys.shape[-1] ** -0.5)
+        weights = torch.softmax(logits + score_bias, dim=-1)
+        return self.output(torch.matmul(weights, values))
 
 
 class RetrieveThenGenerate(BaseVideoGenerator):
@@ -48,8 +56,10 @@ class RetrieveThenGenerate(BaseVideoGenerator):
         ref_features = self._get_reference_features(retrieval_result)
         if ref_features is not None:
             scores = retrieval_result.retrieved_scores[0] if retrieval_result.retrieved_scores else None
-            reference_embedding = self.reference_adapter(ref_features.unsqueeze(0), scores=scores)
+            reference_tokens = self.reference_adapter(ref_features.unsqueeze(0), scores=scores)
+            reference_embedding = reference_tokens.mean(dim=1)
             enhanced = self.aggregator(torch.cat([query_emb, reference_embedding], dim=-1))
+            conditions["reference_tokens"] = reference_tokens
             conditions["reference_embedding"] = reference_embedding
             conditions["enhanced_condition"] = enhanced
             conditions["retrieval_result"] = retrieval_result

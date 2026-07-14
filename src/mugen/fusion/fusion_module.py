@@ -45,8 +45,9 @@ class HierarchicalConditionFusion(nn.Module):
         self.cross_attention = CrossAttentionFusion(hidden_dim, num_heads)
         self.modality_dropout = ModalityDropout(modality_dropout, self.num_modalities)
         self.output_proj = nn.Linear(hidden_dim * 3, hidden_dim)
+        self.hidden_dim = hidden_dim
 
-    def forward(self, modality_inputs, return_weights=False):
+    def forward(self, modality_inputs, return_weights=False, return_tokens=False):
         """
         Args:
             modality_inputs: dict of {modality: (tensor, mask)} pairs
@@ -73,7 +74,7 @@ class HierarchicalConditionFusion(nn.Module):
         projected = {k: v for k, v in projected.items() if v is not None}
 
         if len(projected) == 0:
-            return torch.zeros(1, 768)
+            raise ValueError("at least one modality embedding is required")
 
         # Pad missing modalities with zeros for gating
         D = next(iter(projected.values())).size(-1)
@@ -83,7 +84,7 @@ class HierarchicalConditionFusion(nn.Module):
             if mod in projected:
                 emb_list.append(projected[mod])
             else:
-                emb_list.append(torch.zeros(B, D, device=device))
+                emb_list.append(torch.zeros(B, D, device=device, dtype=next(iter(projected.values())).dtype))
 
         layer_outputs, layer_weights = self.hierarchical_gating(emb_list)
 
@@ -97,6 +98,10 @@ class HierarchicalConditionFusion(nn.Module):
 
         output = (combined + fused) / 2
 
+        if return_tokens and return_weights:
+            return output, layer_weights, layer_outputs.permute(1, 0, 2)
+        if return_tokens:
+            return output, layer_outputs.permute(1, 0, 2)
         if return_weights:
             return output, layer_weights
         return output
