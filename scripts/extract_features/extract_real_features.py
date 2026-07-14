@@ -20,17 +20,25 @@ def main():
     parser.add_argument("--shard-size", type=int, default=128)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--min-valid", type=int, default=5000)
+    parser.add_argument("--num-partitions", type=int, default=1)
+    parser.add_argument("--partition-index", type=int, default=0)
+    parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
     rows = [row for row in read_jsonl(args.manifest) if row.get("status") == "ok"]
     if args.limit:
         rows = rows[: args.limit]
+    if args.num_partitions < 1 or not 0 <= args.partition_index < args.num_partitions:
+        raise ValueError("partition-index must be in [0, num-partitions)")
+    rows = rows[args.partition_index :: args.num_partitions]
     imagebind = ImageBindEncoder()
     internvideo = InternVideoEncoder(args.internvideo_checkpoint)
     writer = FeatureShardWriter(
         args.output,
         {"imagebind": imagebind.version, "internvideo": internvideo.version},
         shard_size=args.shard_size,
+        resume=args.resume,
     )
+    rows = [row for row in rows if row["sample_id"] not in writer.existing_sample_ids]
     failures = []
     for index, row in enumerate(rows, start=1):
         try:
@@ -49,9 +57,17 @@ def main():
     manifest = writer.close()
     failure_path = Path(args.output) / "failures.json"
     failure_path.write_text(json.dumps(failures, indent=2), encoding="utf-8")
-    valid = len(rows) - len(failures)
-    print({"manifest": str(manifest), "valid": valid, "failed": len(failures)})
-    if not args.limit and valid < args.min_valid:
+    new_valid = len(rows) - len(failures)
+    valid = len(writer.existing_sample_ids)
+    print(
+        {
+            "manifest": str(manifest),
+            "valid": valid,
+            "new_valid": new_valid,
+            "failed": len(failures),
+        }
+    )
+    if args.num_partitions == 1 and not args.limit and valid < args.min_valid:
         raise RuntimeError(f"only {valid} real feature rows; release requires {args.min_valid}")
 
 

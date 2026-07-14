@@ -135,6 +135,27 @@ def test_real_feature_store_round_trip():
     assert manifest["rows"] == 2
 
 
+def test_real_feature_store_resume_appends_without_overwrite():
+    with tempfile.TemporaryDirectory() as td:
+        versions = {"imagebind": "commit-a", "internvideo": "commit-b"}
+        first = FeatureShardWriter(td, versions, shard_size=1)
+        first.add(
+            {"sample_id": "a", "feature_source": "real", "media_sha256": "hash-a"},
+            {"text": torch.ones(4), "video": torch.ones(3)},
+        )
+        first.close()
+        resumed = FeatureShardWriter(td, versions, shard_size=1, resume=True)
+        assert resumed.existing_sample_ids == {"a"}
+        resumed.add(
+            {"sample_id": "b", "feature_source": "real", "media_sha256": "hash-b"},
+            {"text": torch.zeros(4), "video": torch.zeros(3)},
+        )
+        resumed.close()
+        _, records, manifest = load_feature_store(td)
+    assert [row["sample_id"] for row in records] == ["a", "b"]
+    assert manifest["rows"] == 2
+
+
 def test_symmetric_info_nce_prefers_matching_pairs():
     target = torch.eye(4)
     good, _ = symmetric_info_nce(target, target)
