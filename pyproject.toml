@@ -64,6 +64,7 @@ serving = [
     "fastapi>=0.100",
     "uvicorn>=0.22",
     "gradio>=3.40",
+    "imageio[ffmpeg]>=2.34",
     "streamlit>=1.25",
 ]
 data = [
