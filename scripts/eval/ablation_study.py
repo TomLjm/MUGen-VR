@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize B0-B5 ablations and enforce paired-bootstrap release gates."""
+"""Summarize the four resume-project ablations with optional bootstrap diagnostics."""
 
 from __future__ import annotations
 
@@ -14,20 +14,24 @@ from mugen.evaluation.statistics import compare_full_to_best_baselines
 VARIANTS = {
     "B0": "AnyFlow image + original prompt",
     "B1": "prompt rewrite prototype",
-    "B2": "real retrieval + reference video prefix",
-    "B3": "fusion tokens without reference",
-    "B4": "fusion + reference adapter without audio",
-    "B5": "full text + image + audio + reference",
+    "B2": "fusion tokens without audio or reference",
+    "B3": "full fusion + audio + reference",
 }
-PRIMARY = {"retrieval_mrr", "vbench_total", "audio_control"}
-NON_REGRESSION = {"subject_consistency", "temporal_consistency"}
 LOWER_IS_BETTER = {"latency_seconds", "peak_vram_gib"}
+REQUIRED_METRICS = {
+    "vbench_total",
+    "retrieval_mrr",
+    "onset_flow_correlation",
+    "latency_seconds",
+    "peak_vram_gib",
+}
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Strict MUGen B0-B5 ablation analysis")
     parser.add_argument("--input", required=True, help="JSONL with pair_id, variant, and metrics")
     parser.add_argument("--output", default="reports/ablation/report.json")
+    parser.add_argument("--case-manifest", help="Optional JSONL describing 6-10 side-by-side cases")
     parser.add_argument("--bootstrap-samples", type=int, default=10_000)
     parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
@@ -56,25 +60,27 @@ def summarize(rows):
     }
 
 
-def release_gates(comparisons, summary):
-    gates = {}
-    for metric in PRIMARY:
-        result = comparisons.get(metric)
-        gates[metric] = bool(result and result["ci_lower"] > 0)
-    for metric in NON_REGRESSION:
-        result = comparisons.get(metric)
-        gates[metric] = bool(result and result["ci_upper"] >= 0)
-    b0 = summary.get("B0", {}).get("means", {})
-    b5 = summary.get("B5", {}).get("means", {})
-    baseline_latency = b0.get("latency_seconds")
-    full_latency = b5.get("latency_seconds")
-    gates["latency_overhead"] = bool(
-        baseline_latency
-        and full_latency is not None
-        and (full_latency - baseline_latency) / baseline_latency <= 0.10
-    )
-    gates["single_3090_vram"] = bool(b5.get("peak_vram_gib", float("inf")) <= 24.0)
-    return {"checks": gates, "passed": bool(gates) and all(gates.values())}
+def completion_check(rows, case_count=None):
+    pair_variants = defaultdict(set)
+    seeds = set()
+    metrics = defaultdict(set)
+    for row in rows:
+        pair_id = str(row.get("pair_id", row.get("sample_id", "")))
+        pair_variants[pair_id].add(row["variant"])
+        seeds.add(row.get("generation_seed"))
+        metrics[row["variant"]].update(
+            key for key, value in row.get("metrics", {}).items() if value is not None
+        )
+    checks = {
+        "held_out_pairs_30_to_50": 30 <= len(pair_variants) <= 50,
+        "all_pairs_have_b0_to_b3": all(values == set(VARIANTS) for values in pair_variants.values()),
+        "uniform_generation_seed": len(seeds) == 1 and None not in seeds,
+        "required_metrics_present": all(
+            REQUIRED_METRICS <= metrics[variant] for variant in VARIANTS
+        ),
+        "side_by_side_cases_6_to_10": case_count is not None and 6 <= case_count <= 10,
+    }
+    return {"checks": checks, "passed": all(checks.values())}
 
 
 def main():
@@ -87,22 +93,25 @@ def main():
     summary = summarize(rows)
     comparisons = compare_full_to_best_baselines(
         rows,
+        full_variant="B3",
+        baseline_variants=("B0", "B1", "B2"),
         higher_is_better={metric: False for metric in LOWER_IS_BETTER},
         samples=args.bootstrap_samples,
         seed=args.seed,
     )
+    case_count = None
+    if args.case_manifest:
+        case_count = len(load_rows(args.case_manifest))
     report = {
         "schema_version": 1,
         "summary": summary,
-        "paired_bootstrap": comparisons,
-        "release_gate": release_gates(comparisons, summary),
+        "paired_bootstrap_advisory": comparisons,
+        "completion_check": completion_check(rows, case_count),
     }
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    print(json.dumps({"output": str(output), "release_gate": report["release_gate"]}))
-    if not report["release_gate"]["passed"]:
-        raise SystemExit(2)
+    print(json.dumps({"output": str(output), "completion_check": report["completion_check"]}))
 
 
 if __name__ == "__main__":

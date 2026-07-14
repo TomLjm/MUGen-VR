@@ -287,7 +287,9 @@ def main():
     pipeline.transformer.requires_grad_(False)
     if args.resume_from:
         pipeline.load_lora_weights(
-            args.resume_from, weight_name="pytorch_lora_weights.safetensors"
+            args.resume_from,
+            weight_name="pytorch_lora_weights.safetensors",
+            adapter_name="default",
         )
     else:
         pipeline.transformer.add_adapter(

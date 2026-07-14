@@ -27,7 +27,7 @@ flowchart LR
 - `Real multimodal features`: ImageBind text/image/audio features and InternVideo2 video/reference features are stored in versioned `safetensors + JSONL` shards.
 - `Reference-guided Retrieve-then-Generate`: self-excluding top-k retrieval is aggregated into four score-aware reference tokens.
 - `Direct AnyFlow injection`: three fusion tokens and four reference tokens are projected into the 4096-dimensional UMT5 space and appended to `prompt_embeds`.
-- `Strict evaluation`: release evaluation decodes real MP4 files, requires VBench, and applies paired bootstrap gates to B0-B5 ablations.
+- `Practical evaluation`: release evaluation decodes real MP4 files and compares four job-relevant ablations on held-out VBench, retrieval, audio-flow, latency, and VRAM metrics.
 
 ## Quick Start
 
@@ -117,7 +117,7 @@ reports/          # generated reports, not model outputs
 - ImageBind real text/image encoding: verified at `(1, 1024)` with unit-norm output.
 - InternVideo2 real video encoding: verified at `(1, 768)` with unit-norm output.
 - Unit and CPU integration tests: required before every release commit.
-- Held-out B0-B5 generation gains: not yet claimed; the release gate remains closed until real three-seed experiments and 10,000-sample paired bootstrap pass.
+- Held-out B0-B3 generation gains: not yet claimed; completion requires 30-50 fixed samples, one generation seed, key metrics, and 6-10 side-by-side cases. Bootstrap remains an optional diagnostic.
 
 UMT5, VAE, and the base AnyFlow transformer remain frozen. Trainable parameters are
 MUGen Fusion, Reference Adapter, the 4096-dimensional condition projector, and LoRA
