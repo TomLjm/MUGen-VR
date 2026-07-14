@@ -145,7 +145,7 @@ def encode_prompts(pipeline, prompts, condition_tokens, device, dtype):
 def encode_latents(pipeline, records, indices, num_frames, height, width, device):
     videos = torch.stack(
         [decode_video(records[index]["video_path"], num_frames, height, width) for index in indices]
-    ).to(device)
+    ).permute(0, 2, 1, 3, 4).to(device)
     with torch.no_grad():
         return pipeline.encode_video(videos, height=height, width=width).to(pipeline.transformer.dtype)
 

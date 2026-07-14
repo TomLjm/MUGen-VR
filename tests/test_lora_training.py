@@ -25,3 +25,23 @@ def test_flow_matching_endpoints_and_target():
     assert torch.equal(noisy[0], clean[0])
     assert torch.equal(noisy[1], noise[1])
     assert torch.equal(target, noise - clean)
+
+
+def test_decode_video_contract_is_channel_first_before_batching(monkeypatch):
+    decoded = torch.zeros(3, 25, 16, 24)
+    monkeypatch.setattr(MODULE, "decode_video", lambda *args, **kwargs: decoded)
+
+    class Pipeline:
+        class Transformer:
+            dtype = torch.float32
+
+        transformer = Transformer()
+
+        def encode_video(self, videos, height, width):
+            assert videos.shape == (1, 25, 3, 16, 24)
+            return torch.zeros(1, 7, 16, 2, 3)
+
+    result = MODULE.encode_latents(
+        Pipeline(), [{"video_path": "unused"}], [0], 25, 16, 24, torch.device("cpu")
+    )
+    assert result.shape == (1, 7, 16, 2, 3)
