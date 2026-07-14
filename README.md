@@ -14,8 +14,9 @@ flowchart LR
   D --> E[ReferenceAdapter]
   C --> F[Condition Assembly]
   E --> F
-  F --> G[Video Generator]
-  G --> H[Unified Evaluation Report]
+  F --> G[7 condition tokens in UMT5 space]
+  G --> I[AnyFlow cross-attention + LoRA]
+  I --> H[Unified Evaluation Report]
   D --> H
   C --> H
 ```
@@ -23,31 +24,40 @@ flowchart LR
 ## Highlights
 
 - `HierarchicalConditionFusion`: projects text, image, and audio conditions into a shared space and exposes modality weights.
-- `Audio-aware prompt planning`: parses music, rhythm, mood, and sound cues from the prompt or audio file and turns them into generation guidance.
-- `Reference-guided Retrieve-then-Generate`: retrieves similar videos and uses the references to rewrite the generation prompt.
-- `Unified evaluation report`: records retrieval, fusion, and generation metadata with explicit skipped metrics when backbones are unavailable.
+- `Real multimodal features`: ImageBind text/image/audio features and InternVideo2 video/reference features are stored in versioned `safetensors + JSONL` shards.
+- `Reference-guided Retrieve-then-Generate`: self-excluding top-k retrieval is aggregated into four score-aware reference tokens.
+- `Direct AnyFlow injection`: three fusion tokens and four reference tokens are projected into the 4096-dimensional UMT5 space and appended to `prompt_embeds`.
+- `Strict evaluation`: release evaluation decodes real MP4 files, requires VBench, and applies paired bootstrap gates to B0-B5 ablations.
 
 ## Quick Start
 
 ```bash
 pip install -e .
-python -c import mugen; print('ok')
-python scripts/showcase/run_multimodal_showcase.py --mode generate --output_dir outputs/showcase/demo \
-  --prompt "a dog running on grass with upbeat rhythmic background music" \
-  --image third_party/ImageBind/.assets/dog_image.jpg
-python scripts/train/train_fusion.py --config configs/training/fusion.yaml --max_steps 100
-python scripts/eval/run_evaluation.py --generated_dir outputs --output reports/demo_report
+python -c "import mugen; print('ok')"
+python -m pytest -q
+python scripts/prepare_data/build_msrvtt_manifest.py --help
+python scripts/extract_features/extract_real_features.py --help
 ```
 
-GPU AnyFlow smoke test, after the model cache is complete:
+The CPU smoke test does not download model weights or generate fake release metrics.
+Real training requires locally installed third-party repositories, their upstream
+checkpoints, and an MSR-VTT media manifest with decodable audio.
+
+Train the project-owned fusion and reference modules from real cached features:
 
 ```bash
-CUDA_VISIBLE_DEVICES=1 python scripts/infer/generation_demo.py \
-  --generator anyflow \
-  --image third_party/ImageBind/.assets/dog_image.jpg \
-  --prompt a dog running on grass \
-  --num_frames 25 \
-  --output outputs/anyflow_smoke.mp4
+python scripts/train/train_fusion.py \
+  --config configs/training/fusion.yaml \
+  --feature-store cache/features/msrvtt-real-v1
+```
+
+Train AnyFlow cross-attention LoRA plus the condition projector (one process per GPU):
+
+```bash
+accelerate launch --num_processes 4 scripts/train/train_lora.py \
+  --config configs/training/lora.yaml \
+  --feature-store cache/features/msrvtt-real-v1 \
+  --fusion-checkpoint outputs/fusion/best-seed-42.pt
 ```
 
 
@@ -78,7 +88,9 @@ python scripts/showcase/run_multimodal_showcase.py \
   --image third_party/ImageBind/.assets/dog_image.jpg
 ```
 
-Current boundary: AnyFlow consumes prompt + image/video conditioning. Audio affects the MUGen fusion weights, retrieval query, and prompt planning; it is not yet injected directly into AnyFlow latent states.
+The showcase script is retained as a historical prototype and must not be used for
+release claims. The release path is `real media -> feature store -> fusion/reference
+training -> condition tokens -> AnyFlow prompt_embeds -> real MP4 -> strict evaluation`.
 
 ## Backbones
 
@@ -100,9 +112,16 @@ tests/            # smoke and unit tests
 reports/          # generated reports, not model outputs
 ```
 
-## Current Training Policy
+## Verified Status
 
-We train small MUGen-owned modules first: fusion, reference adapter, and optional reranker. Foundation backbones stay frozen. AnyFlow LoRA is optional second-stage work after the core pipeline is stable.
+- ImageBind real text/image encoding: verified at `(1, 1024)` with unit-norm output.
+- InternVideo2 real video encoding: verified at `(1, 768)` with unit-norm output.
+- Unit and CPU integration tests: required before every release commit.
+- Held-out B0-B5 generation gains: not yet claimed; the release gate remains closed until real three-seed experiments and 10,000-sample paired bootstrap pass.
+
+UMT5, VAE, and the base AnyFlow transformer remain frozen. Trainable parameters are
+MUGen Fusion, Reference Adapter, the 4096-dimensional condition projector, and LoRA
+weights restricted to AnyFlow cross-attention `q/k/v/out` projections.
 
 ## License
 

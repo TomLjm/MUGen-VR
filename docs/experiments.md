@@ -1,24 +1,37 @@
-# Experiments
+# Experiment Status
 
-The project should report results for four variants:
+Release metrics must come from real held-out media. Smoke artifacts, dummy videos,
+missing VBench results, and `skipped` metrics are not accepted as evidence.
 
-| Variant | Fusion | Retrieval | Modality Dropout |
-| --- | --- | --- | --- |
-| no fusion | average or concat | optional | no |
-| no retrieval | HierarchicalConditionFusion | no | yes |
-| no dropout | HierarchicalConditionFusion | yes | no |
-| full MUGen-VR | HierarchicalConditionFusion | yes | yes |
+## 2026-07-14 encoder smoke
 
-## Required Metrics
+| Encoder | Input | Output | Result |
+|---|---|---:|---|
+| ImageBind | real caption + decoded JPEG keyframe | `(1, 1024)` each | finite, L2 norm 1.0 |
+| InternVideo2 Stage2 1B | decoded MSR-VTT MP4 | `(1, 768)` | finite, L2 norm 1.0 |
 
-- Retrieval: Recall@1/5/10 and MRR.
-- Alignment: cosine similarity between generated/reference condition features.
-- Generation: VBench dimensions when installed, otherwise explicit `skipped` fields.
-- Robustness: score drop under text-only, image-only, text+image, and text+image+reference inputs.
+This verifies the backbone wrappers only. It is not a retrieval or generation result.
 
-## Required Qualitative Cases
+## Required variants
 
-- Same prompt with and without retrieved reference.
-- Missing modality comparison.
-- Gating weights visualization for text/image/audio/reference.
-- SVD baseline vs AnyFlow baseline vs MUGen-VR enhanced condition.
+| Variant | Definition |
+|---|---|
+| B0 | AnyFlow image + original prompt |
+| B1 | historical prompt rewrite prototype |
+| B2 | real retrieval + reference video prefix |
+| B3 | fusion tokens without reference |
+| B4 | fusion + reference adapter without audio |
+| B5 | full text + image + audio + reference with modality dropout |
+
+Each variant uses the same held-out samples, three training seeds, and three generation
+seeds per sample. Reports include retrieval R@1/5/10 and MRR; VBench total, subject
+consistency, motion smoothness, and temporal consistency; audio-video alignment and
+onset/flow correlation; latency, generated FPS, and peak VRAM.
+
+## Release gate
+
+`scripts/eval/ablation_study.py` consumes per-sample JSONL metrics. B5 must beat the
+best B0-B4 baseline on retrieval MRR, VBench total, and the primary audio-control
+metric with the 95% paired-bootstrap confidence interval strictly above zero.
+Subject and temporal consistency may not significantly regress. Four-step condition
+overhead must remain within 10% of B0 and peak VRAM must fit a 24 GB GPU.
