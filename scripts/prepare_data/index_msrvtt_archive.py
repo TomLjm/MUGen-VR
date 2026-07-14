@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a directly hosted MSR-VTT archive and extract 16 kHz audio."""
+"""Validate an MSR-VTT archive with embedded or separately stored audio."""
 
 from __future__ import annotations
 
@@ -20,7 +20,25 @@ def run(command):
         raise RuntimeError(detail[-4000:]) from exc
 
 
-def inspect(row, videos_by_id, audio_root: Path, keyframe_root: Path, overwrite: bool):
+def index_by_stem(root: str | Path | None, suffixes) -> dict[str, Path]:
+    if root is None:
+        return {}
+    root = Path(root)
+    return {
+        path.stem: path
+        for path in root.rglob("*")
+        if path.is_file() and path.suffix.lower() in suffixes
+    }
+
+
+def inspect(
+    row,
+    videos_by_id,
+    source_audio_by_id,
+    audio_root: Path,
+    keyframe_root: Path,
+    overwrite: bool,
+):
     output = dict(row)
     video_path = videos_by_id.get(row["video_id"])
     if video_path is None:
@@ -36,11 +54,15 @@ def inspect(row, videos_by_id, audio_root: Path, keyframe_root: Path, overwrite:
         ])
         payload = json.loads(probe.stdout)
         streams = {stream.get("codec_type") for stream in payload.get("streams", [])}
-        if "video" not in streams or "audio" not in streams:
-            raise ValueError(f"required streams missing: {sorted(streams)}")
+        if "video" not in streams:
+            raise ValueError(f"video stream missing: {sorted(streams)}")
+        source_audio_path = source_audio_by_id.get(row["video_id"])
+        if "audio" not in streams and source_audio_path is None:
+            raise ValueError("audio missing from both video and separate audio root")
+        audio_input = source_audio_path or video_path
         if overwrite or not audio_path.exists():
             run([
-                "ffmpeg", "-v", "error", "-y", "-i", str(video_path), "-vn", "-ac", "1",
+                "ffmpeg", "-v", "error", "-y", "-i", str(audio_input), "-vn", "-ac", "1",
                 "-ar", "16000", str(audio_path),
             ])
         if overwrite or not keyframe_path.exists():
@@ -56,6 +78,8 @@ def inspect(row, videos_by_id, audio_root: Path, keyframe_root: Path, overwrite:
                 "keyframe_path": str(keyframe_path),
                 "decoded_duration": float(payload["format"]["duration"]),
                 "media_sha256": sha256_file(video_path),
+                "audio_sha256": sha256_file(audio_path),
+                "audio_source": "separate" if source_audio_path else "embedded",
             }
         )
     except Exception as exc:
@@ -67,6 +91,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--video-root", required=True)
+    parser.add_argument(
+        "--source-audio-root",
+        help="Optional archive directory containing separate WAV/FLAC/MP3 audio files",
+    )
     parser.add_argument("--audio-root", default="data/msrvtt/audio16k")
     parser.add_argument("--keyframe-root", default="data/msrvtt/keyframes")
     parser.add_argument("--result", default="data/msrvtt/media_manifest.jsonl")
@@ -78,8 +106,8 @@ def main():
     rows = read_jsonl(args.manifest)
     if args.limit:
         rows = rows[: args.limit]
-    videos = list(Path(args.video_root).rglob("*.mp4"))
-    videos_by_id = {path.stem: path for path in videos}
+    videos_by_id = index_by_stem(args.video_root, {".mp4", ".webm", ".mkv"})
+    source_audio_by_id = index_by_stem(args.source_audio_root, {".wav", ".flac", ".mp3", ".m4a"})
     results = []
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         futures = [
@@ -87,6 +115,7 @@ def main():
                 inspect,
                 row,
                 videos_by_id,
+                source_audio_by_id,
                 Path(args.audio_root),
                 Path(args.keyframe_root),
                 args.overwrite,
@@ -101,7 +130,14 @@ def main():
     results.sort(key=lambda row: row["sample_id"])
     write_jsonl(results, args.result)
     valid = sum(row["status"] == "ok" for row in results)
-    print({"archive_videos": len(videos), "processed": len(results), "valid": valid})
+    print(
+        {
+            "archive_videos": len(videos_by_id),
+            "archive_audio": len(source_audio_by_id),
+            "processed": len(results),
+            "valid": valid,
+        }
+    )
     if not args.limit and valid < args.min_valid:
         raise RuntimeError(f"only {valid} valid clips; release requires at least {args.min_valid}")
 

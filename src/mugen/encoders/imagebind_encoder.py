@@ -14,7 +14,12 @@ from ..common.interfaces import EncoderOutput
 
 
 class ImageBindEncoder(BaseEncoderWrapper):
-    def __init__(self, repository: str | Path = "third_party/ImageBind", pretrained: bool = True):
+    def __init__(
+        self,
+        repository: str | Path = "third_party/ImageBind",
+        pretrained: bool = True,
+        checkpoint_path: str | Path | None = None,
+    ):
         super().__init__()
         repository = Path(repository).resolve()
         if not (repository / "imagebind").is_dir():
@@ -28,7 +33,17 @@ class ImageBindEncoder(BaseEncoderWrapper):
             raise RuntimeError(f"failed to import ImageBind from {repository}: {exc}") from exc
         self.data = data
         self.modality_type = ModalityType
-        self.model = imagebind_model.imagebind_huge(pretrained=pretrained).to(self.device).eval()
+        self.model = imagebind_model.imagebind_huge(pretrained=False)
+        if pretrained:
+            checkpoint = Path(checkpoint_path) if checkpoint_path else repository / ".checkpoints" / "imagebind_huge.pth"
+            if not checkpoint.is_file():
+                raise FileNotFoundError(
+                    f"ImageBind checkpoint not found: {checkpoint}. "
+                    "Run scripts/setup_third_party.sh before real feature extraction."
+                )
+            state = torch.load(checkpoint, map_location="cpu", weights_only=True)
+            self.model.load_state_dict(state)
+        self.model = self.model.to(self.device).eval()
         self.version = "ImageBind@53680b0"
 
     def _encode(self, modality, inputs):
