@@ -215,6 +215,7 @@ def save_checkpoint(
     config,
     feature_manifest,
     metrics,
+    optimizer,
 ):
     from peft import get_peft_model_state_dict
 
@@ -239,7 +240,15 @@ def save_checkpoint(
         ),
         encoding="utf-8",
     )
-    accelerator.save_state(checkpoint_dir / "accelerate")
+    torch.save(
+        {
+            "optimizer": optimizer.state_dict(),
+            "cpu_rng_state": torch.get_rng_state(),
+            "cuda_rng_states": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else [],
+            "step": step,
+        },
+        checkpoint_dir / "optimizer.pt",
+    )
     return checkpoint_dir
 
 
@@ -276,9 +285,12 @@ def main():
     pipeline.text_encoder.requires_grad_(False)
     pipeline.vae.requires_grad_(False)
     pipeline.transformer.requires_grad_(False)
-    pipeline.transformer.add_adapter(
-        cross_attention_lora_config(int(config.model.lora.rank), int(config.model.lora.alpha))
-    )
+    if args.resume_from:
+        pipeline.load_lora_weights(args.resume_from)
+    else:
+        pipeline.transformer.add_adapter(
+            cross_attention_lora_config(int(config.model.lora.rank), int(config.model.lora.alpha))
+        )
     pipeline.transformer.enable_gradient_checkpointing()
     trainable_lora = [
         name for name, parameter in pipeline.transformer.named_parameters() if parameter.requires_grad
@@ -294,6 +306,10 @@ def main():
         int(config.model.reference_tokens),
         accelerator.device,
     )
+    if args.resume_from:
+        conditioner.load_state_dict(
+            torch.load(Path(args.resume_from) / "conditioner.pt", map_location="cpu", weights_only=True)
+        )
     optimizer = torch.optim.AdamW(
         [parameter for parameter in pipeline.transformer.parameters() if parameter.requires_grad]
         + list(conditioner.parameters()),
@@ -309,12 +325,19 @@ def main():
     pipeline.text_encoder.to(accelerator.device)
     output_dir.mkdir(parents=True, exist_ok=True)
     log_path = output_dir / f"train-rank-{accelerator.process_index}.jsonl"
+    step = 0
     if args.resume_from:
-        accelerator.load_state(Path(args.resume_from) / "accelerate")
+        resume_state = torch.load(
+            Path(args.resume_from) / "optimizer.pt", map_location="cpu", weights_only=False
+        )
+        optimizer.load_state_dict(resume_state["optimizer"])
+        torch.set_rng_state(resume_state["cpu_rng_state"])
+        if torch.cuda.is_available() and resume_state["cuda_rng_states"]:
+            torch.cuda.set_rng_state_all(resume_state["cuda_rng_states"])
+        step = int(resume_state["step"])
 
     latent_frames = (int(config.data.num_frames) - 1) // pipeline.vae_scale_factor_temporal + 1
     chunks = latent_chunk_partition(latent_frames, int(config.data.latent_chunk_size))
-    step = 0
     with log_path.open("a", encoding="utf-8") as log:
         while step < max_steps:
             batch = sample_indices(train_indices, int(config.training.batch_size), generator)
@@ -372,6 +395,7 @@ def main():
                             config,
                             feature_manifest,
                             {"train_loss": event["loss"], "validation_loss": val_loss},
+                            optimizer,
                         )
                 log.write(json.dumps(event) + "\n")
                 log.flush()

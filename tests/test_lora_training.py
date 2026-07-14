@@ -45,3 +45,9 @@ def test_decode_video_contract_is_channel_first_before_batching(monkeypatch):
         Pipeline(), [{"video_path": "unused"}], [0], 25, 16, 24, torch.device("cpu")
     )
     assert result.shape == (1, 7, 16, 2, 3)
+
+
+def test_training_script_does_not_save_frozen_accelerator_model_state():
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "accelerator.save_state" not in source
+    assert 'checkpoint_dir / "optimizer.pt"' in source
