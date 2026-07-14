@@ -286,7 +286,9 @@ def main():
     pipeline.vae.requires_grad_(False)
     pipeline.transformer.requires_grad_(False)
     if args.resume_from:
-        pipeline.load_lora_weights(args.resume_from)
+        pipeline.load_lora_weights(
+            args.resume_from, weight_name="pytorch_lora_weights.safetensors"
+        )
     else:
         pipeline.transformer.add_adapter(
             cross_attention_lora_config(int(config.model.lora.rank), int(config.model.lora.alpha))

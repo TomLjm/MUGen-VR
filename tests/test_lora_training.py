@@ -51,3 +51,4 @@ def test_training_script_does_not_save_frozen_accelerator_model_state():
     source = SCRIPT.read_text(encoding="utf-8")
     assert "accelerator.save_state" not in source
     assert 'checkpoint_dir / "optimizer.pt"' in source
+    assert 'weight_name="pytorch_lora_weights.safetensors"' in source
