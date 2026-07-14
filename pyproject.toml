@@ -51,6 +51,7 @@ imagebind = [
 ]
 generation = [
     "diffusers==0.35.1",
+    "peft>=0.12",
     "xformers>=0.0.20",
     "open-clip-torch>=2.20",
 ]
