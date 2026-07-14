@@ -1,112 +1,109 @@
-# MUGen-VR: 统一多模态表征下的视频理解、检索与可控生成系统
+# MUGen-VR
 
-**M**ultimodal **U**nified representation for video understanding, retrieval, and controllable **Gen**eration with **V**ideo **R**epresentation
+**Unified Multimodal Representation + Retrieve-then-Generate + Robust Condition Fusion**
 
-## 项目定位
+MUGen-VR is a multimodal video system for understanding, retrieval, and controllable generation. Foundation models are used as frozen backbones; the project-owned contribution is the trainable condition layer that fuses multimodal inputs, retrieves reference videos, injects reference features into generation, and reports what worked or failed.
 
-基于开源 foundation model 构建的一体化系统，支持：
-- **理解**：对视频内容进行多模态理解与统一表征
-- **检索**：在视频库中进行跨模态检索（文本→视频、图像→视频、音频→视频）
-- **生成**：根据多模态条件生成或续写短视频
-- **评测**：自动评估生成质量、对齐质量与鲁棒性
+## Architecture
 
-## 系统架构
-
-```
-                      ┌─────────────────────────┐
-                      │   评测与分析层 (Eval)     │
-                      │  VBench + 自定义指标      │
-                      └──────────┬──────────────┘
-                                 │
-                      ┌──────────▼──────────────┐
-                      │     生成层 (Generation)   │
-                      │  generative-models +      │
-                      │  LoRA/Adapter + 检索增强   │
-                      └──────────┬──────────────┘
-                                 │
-                      ┌──────────▼──────────────┐
-                      │   检索与理解层 (Retrieval)│
-                      │  InternVideo + Rerank    │
-                      └──────────┬──────────────┘
-                                 │
-                      ┌──────────▼──────────────┐
-                      │ 多模态编码与统一表征层     │
-                      │  ImageBind + Unified API │
-                      └──────────┬──────────────┘
-                                 │
-                      ┌──────────▼──────────────┐
-                      │    数据与特征层 (Data)    │
-                      │  切片 / 特征缓存 / Schema │
-                      └─────────────────────────┘
+```mermaid
+flowchart LR
+  A[Text / Image / Audio / Video] --> B[Backbone Encoders]
+  B --> C[HierarchicalConditionFusion]
+  C --> D[Cross-modal Retrieval]
+  D --> E[ReferenceAdapter]
+  C --> F[Condition Assembly]
+  E --> F
+  F --> G[Video Generator]
+  G --> H[Unified Evaluation Report]
+  D --> H
+  C --> H
 ```
 
-## 核心创新点
+## Highlights
 
-1. **A：层次化多模态条件融合** — 不同层次特征（低层外观/中层音频/高层语义）动态融合
-2. **B：检索增强的视频生成** — Retrieve-then-Generate pipeline
-3. **C：模态缺失鲁棒性训练** — Modality Dropout + Confidence Weighting
+- `HierarchicalConditionFusion`: projects text, image, and audio conditions into a shared space and exposes modality weights.
+- `Audio-aware prompt planning`: parses music, rhythm, mood, and sound cues from the prompt or audio file and turns them into generation guidance.
+- `Reference-guided Retrieve-then-Generate`: retrieves similar videos and uses the references to rewrite the generation prompt.
+- `Unified evaluation report`: records retrieval, fusion, and generation metadata with explicit skipped metrics when backbones are unavailable.
 
-## 快速开始
+## Quick Start
 
 ```bash
-# 创建 conda 环境
-conda create -n mugen python=3.10 -y
-conda activate mugen
-pip install -r requirements/base.txt
-
-# 准备数据
-python scripts/prepare_data/prepare_dataset.py --config configs/data/default.yaml
-
-# 提取特征
-python scripts/extract_features/extract_all.py --config configs/data/default.yaml
-
-# 运行检索
-python scripts/infer/retrieval_demo.py --query "your text query"
-
-# 运行生成
-python scripts/infer/generation_demo.py --text "a dog running" --image input.jpg
+pip install -e .
+python -c import mugen; print('ok')
+python scripts/showcase/run_multimodal_showcase.py --mode generate --output_dir outputs/showcase/demo \
+  --prompt "a dog running on grass with upbeat rhythmic background music" \
+  --image third_party/ImageBind/.assets/dog_image.jpg
+python scripts/train/train_fusion.py --config configs/training/fusion.yaml --max_steps 100
+python scripts/eval/run_evaluation.py --generated_dir outputs --output reports/demo_report
 ```
 
-## 目录结构
+GPU AnyFlow smoke test, after the model cache is complete:
 
-```
-MUGen-VR/
-├── src/           # 核心源码（原创模块）
-│   ├── data/      # 数据加载与预处理
-│   ├── encoders/  # 统一多模态编码器接口
-│   ├── fusion/    # 多模态融合模块（创新点A）
-│   ├── retrieval/ # 跨模态检索
-│   ├── generation/# 条件视频生成（创新点B）
-│   ├── evaluation/# 评测与报告
-│   ├── serving/   # API与Demo服务
-│   └── common/    # 公共接口与工具
-├── configs/       # 配置文件
-├── scripts/       # 运行脚本
-├── experiments/   # 实验结果
-├── docs/          # 文档
-├── demos/         # 演示应用
-└── third_party/   # 第三方基座Repo
+```bash
+CUDA_VISIBLE_DEVICES=1 python scripts/infer/generation_demo.py \
+  --generator anyflow \
+  --image third_party/ImageBind/.assets/dog_image.jpg \
+  --prompt a dog running on grass \
+  --num_frames 25 \
+  --output outputs/anyflow_smoke.mp4
 ```
 
-## 基座依赖
 
-- [InternVideo](https://github.com/OpenGVLab/InternVideo) — 视频编码与检索主干
-- [ImageBind](https://github.com/facebookresearch/ImageBind) — 多模态统一表征
-- [generative-models](https://github.com/Stability-AI/generative-models) — 视频生成后端
-- [VBench](https://github.com/Vchitect/VBench) — 视频生成质量评测
-- [CLAP](https://github.com/LAION-AI/CLAP) — 音频增强（可选）
+## Showcase: Multimodal Condition Path
 
-## 阶段路线
+The public demo is a video-first showcase. The report is included for explainability, but the primary artifact is the generated MP4:
 
-| Phase | 目标 | 时间 |
-|-------|------|------|
-| 1 | Baseline 打通（最小闭环） | Week 1-2 |
-| 2 | 统一表征与桥接 | Week 3 |
-| 3 | 融合模块与创新点A | Week 4 |
-| 4 | 检索增强生成（创新点B） | Week 5 |
-| 5 | 鲁棒性训练（创新点C） | Week 6 |
-| 6 | 评测闭环与Demo | Week 7-8 |
+```bash
+python scripts/showcase/run_multimodal_showcase.py \
+  --mode report \
+  --prompt "a dog running on grass with cinematic motion" \
+  --image third_party/ImageBind/.assets/dog_image.jpg \
+  --output_dir outputs/showcase/multimodal_report_only
+```
+
+This produces:
+
+- `result.mp4` when `--mode generate` is used and a GPU is available.
+- `report.md` / `report.json` for the explainable condition trace.
+- `gating_weights.json` and `retrieval_results.json` for the multimodal condition summary.
+
+For a report-only dry run:
+
+```bash
+python scripts/showcase/run_multimodal_showcase.py \
+  --mode report \
+  --prompt "a dog running on grass with upbeat rhythmic background music" \
+  --image third_party/ImageBind/.assets/dog_image.jpg
+```
+
+Current boundary: AnyFlow consumes prompt + image/video conditioning. Audio affects the MUGen fusion weights, retrieval query, and prompt planning; it is not yet injected directly into AnyFlow latent states.
+
+## Backbones
+
+- InternVideo for video understanding and retrieval features.
+- ImageBind for multimodal embedding prototypes.
+- AnyFlow-FAR / Diffusers for video generation.
+- VBench for optional video generation evaluation.
+
+Backbones are not vendored as trained weights. Their licenses and model cards should be checked before redistribution.
+
+## Project Layout
+
+```text
+src/mugen/        # project-owned package
+scripts/          # training, inference, and evaluation entrypoints
+configs/          # data, training, inference, and evaluation configs
+docs/             # architecture, method, experiments, third-party commits
+tests/            # smoke and unit tests
+reports/          # generated reports, not model outputs
+```
+
+## Current Training Policy
+
+We train small MUGen-owned modules first: fusion, reference adapter, and optional reranker. Foundation backbones stay frozen. AnyFlow LoRA is optional second-stage work after the core pipeline is stable.
 
 ## License
 
-本项目仅用于学术研究和面试展示。
+MIT for project-owned code. Third-party backbones keep their original licenses.

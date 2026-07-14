@@ -1,28 +1,34 @@
-# Third-party code (all of it)
-third_party/
-
-# Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.egg-info/
-.env/
-
-# Outputs
-outputs/
-*.mp4
-*.avi
-*.webm
-
-# Temp
-tmp/
-*.tmp
+dist/
+build/
+.eggs/
+*.so
+.env
+*.env
 *.log
-
-# OS
+*.pid
 .DS_Store
-Thumbs.db
-
-# IDE
-.idea/
-.vscode/
+.cache/
+cache/
+checkpoints/
+models/
+outputs/*.gif
+outputs/*.mp4
+outputs/*.pt
+outputs/*.pth
+outputs/*.safetensors
+outputs/**/*.gif
+outputs/**/*.mp4
+outputs/**/*.pt
+outputs/**/*.pth
+outputs/**/*.safetensors
+reports/**/*.mp4
+reports/**/*.gif
+wandb/
+lightning_logs/
+third_party/*/data/
+third_party/*/pretrained/
+*.incomplete
