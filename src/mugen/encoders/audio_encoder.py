@@ -15,14 +15,11 @@ class AudioEncoder(BaseEncoderWrapper):
         try:
             self.feature_extractor = AutoFeatureExtractor.from_pretrained(model_name)
             self.model = AutoModel.from_pretrained(model_name).to(self.device)
-        except Exception:
-            self.model = None
-            print(f"Warning: Could not load {model_name}, audio encoding disabled")
+        except Exception as exc:
+            raise RuntimeError(f"failed to load required audio encoder {model_name}: {exc}") from exc
 
     @torch.no_grad()
     def encode_audio(self, audio_path, **kwargs):
-        if self.model is None:
-            return EncoderOutput(embedding=torch.zeros(1, 512))
         waveform, sr = torchaudio.load(audio_path)
         if sr != self.sample_rate:
             resampler = torchaudio.transforms.Resample(sr, self.sample_rate)

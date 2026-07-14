@@ -15,7 +15,7 @@ build/
 cache/
 checkpoints/
 models/
-data/
+/data/
 outputs/
 reports/generated/
 outputs/*.gif

@@ -27,8 +27,7 @@ class VideoEncoder(BaseEncoderWrapper):
     @torch.no_grad()
     def encode_video(self, video_path, **kwargs):
         if self.model is None:
-            self.model = DummyVideoEncoder().to(self.device)
-            self.model.eval()
+            raise RuntimeError("InternVideo checkpoint is required; dummy video features are not allowed")
         video = load_video(video_path, num_frames=8).unsqueeze(0).to(self.device)
         embedding = self.model(video)
         return EncoderOutput(

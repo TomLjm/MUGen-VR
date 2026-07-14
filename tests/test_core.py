@@ -1,5 +1,6 @@
 ﻿import os
 import tempfile
+from pathlib import Path
 
 import torch
 
@@ -11,6 +12,8 @@ from mugen.generation.retrieve_then_generate import RetrieveThenGenerate
 from mugen.generation.conditioner import MultimodalConditioner
 from mugen.retrieval.feature_index import FeatureIndex
 from mugen.retrieval.retriever import CrossModalRetriever
+from mugen.data.feature_store import FeatureShardWriter, load_feature_store
+from mugen.data.manifest import validate_split_isolation
 
 
 def test_feature_index_save_load_search_consistency():
@@ -101,3 +104,31 @@ def test_multimodal_conditioner_outputs_anyflow_tokens():
     )
     assert bundle.condition_tokens.shape == (2, 7, 16)
     assert all(bundle.modality_mask.values())
+
+
+def test_split_isolation_rejects_video_leakage():
+    rows = [
+        {"video_id": "v1", "split": "train"},
+        {"video_id": "v1", "split": "val"},
+    ]
+    try:
+        validate_split_isolation(rows)
+    except ValueError as exc:
+        assert "both train and val" in str(exc)
+    else:
+        raise AssertionError("split leakage must be rejected")
+
+
+def test_real_feature_store_round_trip():
+    with tempfile.TemporaryDirectory() as td:
+        writer = FeatureShardWriter(td, {"imagebind": "commit-a", "internvideo": "commit-b"}, shard_size=1)
+        for index in range(2):
+            writer.add(
+                {"sample_id": str(index), "feature_source": "real", "media_sha256": f"hash-{index}"},
+                {"text": torch.ones(4) * index, "video": torch.ones(3) * index},
+            )
+        manifest_path = writer.close()
+        tensors, records, manifest = load_feature_store(Path(manifest_path).parent)
+    assert tensors["text"].shape == (2, 4)
+    assert len(records) == 2
+    assert manifest["rows"] == 2

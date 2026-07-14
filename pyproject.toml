@@ -65,6 +65,9 @@ serving = [
     "gradio>=3.40",
     "streamlit>=1.25",
 ]
+data = [
+    "yt-dlp>=2026.5",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
