@@ -1,0 +1,18 @@
+{
+  "status": "engineering-smoke-complete; held-out-evaluation-pending",
+  "evaluation": {
+    "samples": 40,
+    "generation_seed": 42,
+    "variants": ["B0", "B1", "B2", "B3"]
+  },
+  "engineering_smoke": {
+    "frames": 25,
+    "resolution": "256x448",
+    "steps": 1,
+    "seconds": 4.1212,
+    "generated_fps": 6.0662,
+    "peak_vram_gib": 15.4729
+  },
+  "metrics": [],
+  "cases": []
+}
