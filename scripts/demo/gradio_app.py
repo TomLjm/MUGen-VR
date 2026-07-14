@@ -9,7 +9,6 @@ import tempfile
 import time
 from pathlib import Path
 
-import gradio as gr
 import imageio.v3 as iio
 import torch
 import torch.nn.functional as F
@@ -95,7 +94,7 @@ class MUGenDemo:
 
     def generate(self, text, image_path, audio_path, seed):
         if not text or not image_path or not audio_path:
-            raise gr.Error("text, image, and audio are required")
+            raise ValueError("text, image, and audio are required")
         image = Image.open(image_path).convert("RGB")
         embeddings = self._features(text, image_path, audio_path)
         references, scores, reference_metadata = self._retrieve(embeddings)
@@ -160,6 +159,10 @@ def parse_args():
 
 def main():
     args = parse_args()
+    try:
+        import gradio as gr
+    except ImportError as exc:
+        raise RuntimeError("install the demo dependencies with: pip install -e '.[serving]'") from exc
     backend = MUGenDemo(args)
     with gr.Blocks(title="MUGen-VR") as demo:
         gr.Markdown("# MUGen-VR: B0 vs B3")
