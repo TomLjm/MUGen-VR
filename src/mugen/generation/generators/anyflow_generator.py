@@ -10,6 +10,21 @@ from ..base import BaseVideoGenerator
 from ...common.interfaces import ConditionBundle, GenerationResult
 
 
+def build_chunk_partition(num_pixel_frames, temporal_scale, default_partition):
+    latent_frames = (num_pixel_frames - 1) // temporal_scale + 1
+    default_partition = list(default_partition)
+    if sum(default_partition) == latent_frames:
+        return default_partition
+    chunk_size = default_partition[1] if len(default_partition) > 1 else 3
+    partition = [1]
+    remaining = latent_frames - 1
+    while remaining:
+        size = min(chunk_size, remaining)
+        partition.append(size)
+        remaining -= size
+    return partition
+
+
 class AnyFlowVideoGenerator(BaseVideoGenerator):
     """AnyFlow-FAR generator using Diffusers' `video=` conditioning API."""
 
@@ -89,6 +104,13 @@ class AnyFlowVideoGenerator(BaseVideoGenerator):
         generator = None
         if seed is not None:
             generator = torch.Generator(device=self.device).manual_seed(seed)
+        chunk_partition = kwargs.get("chunk_partition")
+        if chunk_partition is None:
+            chunk_partition = build_chunk_partition(
+                n_frames,
+                self.pipeline.vae_scale_factor_temporal,
+                self.pipeline.transformer.config.chunk_partition,
+            )
 
         output = self.pipeline(
             prompt=None if prompt_embeds is not None else prompt,
@@ -100,7 +122,7 @@ class AnyFlowVideoGenerator(BaseVideoGenerator):
             num_inference_steps=n_steps,
             generator=generator,
             output_type="np",
-            chunk_partition=kwargs.get("chunk_partition"),
+            chunk_partition=chunk_partition,
             use_kv_cache=kwargs.get("use_kv_cache", True),
         )
 
@@ -114,6 +136,7 @@ class AnyFlowVideoGenerator(BaseVideoGenerator):
                 "prompt": prompt,
                 "seed": seed,
                 "condition_tokens": 0 if conditions.condition_tokens is None else conditions.condition_tokens.shape[1],
+                "chunk_partition": chunk_partition,
             },
         )
 
