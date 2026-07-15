@@ -49,6 +49,13 @@ def gather_reference_embeddings(gallery, indices):
     return references
 
 
+def apply_condition_scale(bundles, scale):
+    for variant in ("B2", "B3"):
+        bundles[variant].condition_tokens = bundles[variant].condition_tokens * float(scale)
+        bundles[variant].metadata["condition_scale"] = float(scale)
+    return bundles
+
+
 class AblationGenerator:
     def __init__(self, args):
         self.args = args
@@ -155,6 +162,7 @@ class AblationGenerator:
             "sample_id": row["sample_id"],
             "variant": variant,
             "generation_seed": int(row["generation_seed"]),
+            "condition_scale": float(bundle.metadata.get("condition_scale", 1.0)),
             "caption": row["caption"],
             "input_audio_path": row["input_audio_path"],
             "generated_video_path": str(video_path),
@@ -180,6 +188,8 @@ def parse_args():
     parser.add_argument("--width", type=int, default=448)
     parser.add_argument("--steps", type=int, default=4)
     parser.add_argument("--top-k", type=int, default=3)
+    parser.add_argument("--condition-scale", type=float, default=1.0)
+    parser.add_argument("--variants", nargs="+", choices=VARIANTS, default=list(VARIANTS))
     parser.add_argument("--num-partitions", type=int, default=1)
     parser.add_argument("--partition-index", type=int, default=0)
     return parser.parse_args()
@@ -206,7 +216,8 @@ def main():
     with result_path.open("a", encoding="utf-8") as handle:
         for row in rows:
             bundles, references = backend.conditions(row)
-            for variant in VARIANTS:
+            bundles = apply_condition_scale(bundles, args.condition_scale)
+            for variant in args.variants:
                 if (row["pair_id"], variant) in complete:
                     continue
                 result = backend.run_variant(row, variant, bundles[variant], references, output_dir)
