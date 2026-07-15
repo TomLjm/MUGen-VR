@@ -123,6 +123,20 @@ python scripts/eval/ablation_study.py \
   --output reports/project-final/final-report.json
 ```
 
+Stage the Hugging Face Model upload from an explicit whitelist:
+
+```bash
+python scripts/release/package_hf_model.py \
+  --checkpoint outputs/lora-project-v1-train-only/checkpoint-300 \
+  --evaluation reports/project-final/final-report.json \
+  --output release/hf_model \
+  --condition-scale 0.1
+```
+
+This copies only MUGen-owned conditioner/LoRA weights, sanitized configuration,
+evaluation, checksums, and the Model Card. It excludes optimizer state, upstream
+weights, media, and cached features.
+
 
 ## Showcase: Multimodal Condition Path
 
