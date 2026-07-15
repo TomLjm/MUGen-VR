@@ -24,7 +24,7 @@
     h1 { margin: 0; font-size: 24px; font-weight: 720; }
     h2 { margin: 0 0 14px; font-size: 18px; }
     p { color: var(--muted); line-height: 1.55; }
-    .status { color: var(--amber); font-size: 13px; font-weight: 650; text-align: right; }
+    .status { color: var(--green); font-size: 13px; font-weight: 650; text-align: right; }
     main { padding: 24px 0 48px; }
     section { margin-bottom: 30px; }
     .summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
@@ -99,7 +99,8 @@
       const byVariant = Object.fromEntries(data.metrics.map(row => [row.variant, row]));
       document.getElementById("metrics").innerHTML = Object.keys(definitions).map(variant => {
         const row = byVariant[variant] || {};
-        return `<tr><td><strong>${variant}</strong><br>${definitions[variant]}</td><td>${fmt(row.vbench_total)}</td><td>${fmt(row.retrieval_mrr)}</td><td>${fmt(row.onset_flow_correlation)}</td><td>${fmt(row.latency_seconds, " s")}</td><td>${fmt(row.peak_vram_gib, " GiB")}</td></tr>`;
+        const retrieval = row.retrieval_mrr == null ? "n/a" : fmt(row.retrieval_mrr);
+        return `<tr><td><strong>${variant}</strong><br>${definitions[variant]}</td><td>${fmt(row.vbench_total)}</td><td>${retrieval}</td><td>${fmt(row.onset_flow_correlation)}</td><td>${fmt(row.latency_seconds, " s")}</td><td>${fmt(row.peak_vram_gib, " GiB")}</td></tr>`;
       }).join("");
       const cases = document.getElementById("cases");
       if (!data.cases.length) {
