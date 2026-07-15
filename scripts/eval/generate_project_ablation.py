@@ -39,6 +39,14 @@ def save_video(frames, path, fps=8):
     iio.imwrite(path, array, fps=fps, codec="libx264")
 
 
+def gather_reference_embeddings(gallery, indices):
+    """Keep the reference-adapter contract as [batch, top_k, feature_dim]."""
+    references = gallery[indices]
+    if references.ndim != 3:
+        raise ValueError(f"expected 3D reference embeddings, got {tuple(references.shape)}")
+    return references
+
+
 class AblationGenerator:
     def __init__(self, args):
         self.args = args
@@ -89,7 +97,7 @@ class AblationGenerator:
         gallery = self.tensors["video"][gallery_indices].to(device)
         scores = F.normalize(initial.float(), dim=-1) @ F.normalize(gallery.float(), dim=-1).T
         values, indices = scores[0].topk(min(self.args.top_k, len(gallery_indices)))
-        references = gallery[indices].unsqueeze(0)
+        references = gather_reference_embeddings(gallery, indices)
         reference_metadata = [
             {
                 "sample_id": self.records[gallery_indices[int(reference_index)]]["sample_id"],
