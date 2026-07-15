@@ -1,5 +1,6 @@
 ﻿import os
 import tempfile
+import json
 from pathlib import Path
 
 import torch
@@ -72,6 +73,31 @@ def test_vbench_unavailable_is_skipped_not_zero():
     assert result.details["status"] in {"skipped", "ok"}
     if result.details["status"] == "skipped":
         assert all(v is None for v in result.metrics.values())
+
+
+def test_vbench_adapter_uses_official_custom_input_api(monkeypatch, tmp_path):
+    calls = {}
+
+    class FakeVBench:
+        def __init__(self, device, full_info_dir, output_path):
+            calls["init"] = (str(device), full_info_dir, output_path)
+            self.output_path = Path(output_path)
+
+        def evaluate(self, **kwargs):
+            calls["evaluate"] = kwargs
+            payload = {dimension: [0.8, {}] for dimension in kwargs["dimension_list"]}
+            (self.output_path / f"{kwargs['name']}_eval_results.json").write_text(
+                json.dumps(payload), encoding="utf-8"
+            )
+
+    adapter = VBenchAdapter(dims=["subject_consistency"], output_path=tmp_path / "vbench")
+    monkeypatch.setattr(adapter, "_load_vbench_class", lambda: (FakeVBench, tmp_path))
+
+    result = adapter.evaluate(tmp_path, required=True)
+
+    assert result.details["status"] == "ok"
+    assert result.metrics == {"subject_consistency": 0.8, "vbench_total": 0.8}
+    assert calls["evaluate"]["mode"] == "custom_input"
 
 
 def test_condition_bundle_appends_tokens():
