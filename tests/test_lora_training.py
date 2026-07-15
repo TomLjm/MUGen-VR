@@ -72,3 +72,4 @@ def test_training_script_does_not_save_frozen_accelerator_model_state():
     assert 'checkpoint_dir / "optimizer.pt"' in source
     assert 'weight_name="pytorch_lora_weights.safetensors"' in source
     assert 'adapter_name="default"' in source
+    assert "DistributedDataParallelKwargs(find_unused_parameters=True)" in source

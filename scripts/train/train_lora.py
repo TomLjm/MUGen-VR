@@ -260,6 +260,7 @@ def save_checkpoint(
 
 def main():
     from accelerate import Accelerator
+    from accelerate.utils import DistributedDataParallelKwargs
     from diffusers import AnyFlowFARPipeline
 
     args = parse_args()
@@ -271,6 +272,7 @@ def main():
     accelerator = Accelerator(
         mixed_precision=str(config.training.mixed_precision),
         gradient_accumulation_steps=int(config.training.gradient_accumulation_steps),
+        kwargs_handlers=[DistributedDataParallelKwargs(find_unused_parameters=True)],
     )
     seed = int(config.training.seed) + accelerator.process_index
     random.seed(seed)
