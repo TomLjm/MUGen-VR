@@ -2,6 +2,7 @@
 """Run MUGen evaluation and write a unified report."""
 import argparse
 import os
+from pathlib import Path
 
 from mugen.evaluation.custom_metrics import CustomMetrics
 from mugen.evaluation.report_generator import ReportGenerator
@@ -27,7 +28,7 @@ def main():
     os.makedirs(args.output, exist_ok=True)
     videos = find_videos(args.generated_dir)
     custom = CustomMetrics().evaluate_video_files(videos)
-    vbench = VBenchAdapter().evaluate(
+    vbench = VBenchAdapter(output_path=Path(args.output) / "vbench").evaluate(
         args.generated_dir,
         args.reference_dir,
         required=not args.allow_missing_vbench,
