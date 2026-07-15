@@ -14,9 +14,17 @@ from mugen.evaluation.audio_control import (
 )
 
 
+def load_rows(manifests):
+    rows = []
+    for manifest in manifests:
+        with Path(manifest).open("r", encoding="utf-8") as handle:
+            rows.extend(json.loads(line) for line in handle if line.strip())
+    return rows
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Audio-video control evaluation")
-    parser.add_argument("--manifest", required=True)
+    parser.add_argument("--manifest", required=True, nargs="+")
     parser.add_argument("--output", default="reports/audio_control/report.json")
     parser.add_argument("--frame-count", type=int, default=8)
     return parser.parse_args()
@@ -24,8 +32,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    with Path(args.manifest).open("r", encoding="utf-8") as handle:
-        rows = [json.loads(line) for line in handle if line.strip()]
+    rows = load_rows(args.manifest)
     if not rows:
         raise ValueError("audio-control manifest is empty")
     encoder = ImageBindEncoder()
