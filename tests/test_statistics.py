@@ -38,13 +38,13 @@ def test_paired_bootstrap_rejects_unpaired_arrays():
 
 
 def test_practical_completion_check_uses_four_variants_and_fixed_seed():
-    metrics = {name: 1.0 for name in ABLATION.REQUIRED_METRICS}
+    metrics = {name: 1.0 for name in ABLATION.COMMON_REQUIRED_METRICS}
     rows = [
         {
             "pair_id": f"sample-{sample}",
             "variant": variant,
             "generation_seed": 42,
-            "metrics": metrics,
+            "metrics": {**metrics, **({"retrieval_mrr": 1.0} if variant in {"B2", "B3"} else {})},
         }
         for sample in range(30)
         for variant in ABLATION.VARIANTS

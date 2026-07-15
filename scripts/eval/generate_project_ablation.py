@@ -83,15 +83,17 @@ class AblationGenerator:
             initial = self.conditioner.fusion(
                 {name: (value, None) for name, value in embeddings.items()}
             )
-        gallery = self.tensors["video"].to(device)
+        gallery_indices = [
+            gallery_index for gallery_index, record in enumerate(self.records) if record["split"] == "train"
+        ]
+        gallery = self.tensors["video"][gallery_indices].to(device)
         scores = F.normalize(initial.float(), dim=-1) @ F.normalize(gallery.float(), dim=-1).T
-        scores[0, index] = -torch.inf
-        values, indices = scores[0].topk(min(self.args.top_k, len(self.records) - 1))
+        values, indices = scores[0].topk(min(self.args.top_k, len(gallery_indices)))
         references = gallery[indices].unsqueeze(0)
         reference_metadata = [
             {
-                "sample_id": self.records[int(reference_index)]["sample_id"],
-                "caption": self.records[int(reference_index)]["caption"],
+                "sample_id": self.records[gallery_indices[int(reference_index)]]["sample_id"],
+                "caption": self.records[gallery_indices[int(reference_index)]]["caption"],
                 "score": float(values[position]),
             }
             for position, reference_index in enumerate(indices)

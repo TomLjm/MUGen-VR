@@ -18,9 +18,8 @@ VARIANTS = {
     "B3": "full fusion + audio + reference",
 }
 LOWER_IS_BETTER = {"latency_seconds", "peak_vram_gib"}
-REQUIRED_METRICS = {
+COMMON_REQUIRED_METRICS = {
     "vbench_total",
-    "retrieval_mrr",
     "onset_flow_correlation",
     "latency_seconds",
     "peak_vram_gib",
@@ -76,8 +75,8 @@ def completion_check(rows, case_count=None):
         "all_pairs_have_b0_to_b3": all(values == set(VARIANTS) for values in pair_variants.values()),
         "uniform_generation_seed": len(seeds) == 1 and None not in seeds,
         "required_metrics_present": all(
-            REQUIRED_METRICS <= metrics[variant] for variant in VARIANTS
-        ),
+            COMMON_REQUIRED_METRICS <= metrics[variant] for variant in VARIANTS
+        ) and all("retrieval_mrr" in metrics[variant] for variant in ("B2", "B3")),
         "side_by_side_cases_6_to_10": case_count is not None and 6 <= case_count <= 10,
     }
     return {"checks": checks, "passed": all(checks.values())}
