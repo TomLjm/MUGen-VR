@@ -1,9 +1,14 @@
 {
-  "status": "engineering-smoke-complete; held-out-evaluation-pending",
+  "status": "held-out-evaluation-complete",
   "evaluation": {
     "samples": 40,
     "generation_seed": 42,
-    "variants": ["B0", "B1", "B2", "B3"]
+    "variants": [
+      "B0",
+      "B1",
+      "B2",
+      "B3"
+    ]
   },
   "engineering_smoke": {
     "frames": 25,
@@ -13,6 +18,236 @@
     "generated_fps": 6.0662,
     "peak_vram_gib": 15.4729
   },
-  "metrics": [],
-  "cases": []
+  "metrics": [
+    {
+      "variant": "B0",
+      "latency_seconds": 4.415573643179959,
+      "generated_fps": 5.700837394230057,
+      "peak_vram_gib": 15.610107421875,
+      "subject_consistency": 0.884030045941472,
+      "motion_smoothness": 0.984162795787803,
+      "temporal_flickering": 0.9728844855112184,
+      "aesthetic_quality": 0.4435853444039819,
+      "imaging_quality": 0.5152302944946286,
+      "vbench_total": 0.759978593227821,
+      "imagebind_audio_video_alignment": 0.2249340817797929,
+      "onset_flow_correlation": 0.01786091947584697
+    },
+    {
+      "variant": "B1",
+      "latency_seconds": 4.26074977768003,
+      "generated_fps": 5.877865403882483,
+      "peak_vram_gib": 15.610107421875,
+      "subject_consistency": 0.8433478668642538,
+      "motion_smoothness": 0.9751392628313267,
+      "temporal_flickering": 0.9570126858178301,
+      "aesthetic_quality": 0.45098427012562714,
+      "imaging_quality": 0.5291726571655279,
+      "vbench_total": 0.7511313485609136,
+      "imagebind_audio_video_alignment": 0.23401265256106854,
+      "onset_flow_correlation": 0.03631851392772683
+    },
+    {
+      "variant": "B2",
+      "latency_seconds": 4.279900551162427,
+      "generated_fps": 5.849079877479161,
+      "peak_vram_gib": 15.610107421875,
+      "subject_consistency": 0.8709420069120819,
+      "motion_smoothness": 0.9821310122763294,
+      "temporal_flickering": 0.9698621026908654,
+      "aesthetic_quality": 0.44844568669796,
+      "imaging_quality": 0.5265446289634709,
+      "vbench_total": 0.7595850875081422,
+      "imagebind_audio_video_alignment": 0.2250766169745475,
+      "onset_flow_correlation": -0.0011641985030232075,
+      "retrieval_rank": 1.0,
+      "retrieval_mrr": 1.0
+    },
+    {
+      "variant": "B3",
+      "latency_seconds": 4.309116636033286,
+      "generated_fps": 5.810298692646417,
+      "peak_vram_gib": 15.610107421875,
+      "subject_consistency": 0.8677799109912785,
+      "motion_smoothness": 0.9811141542968373,
+      "temporal_flickering": 0.9684628730077376,
+      "aesthetic_quality": 0.44271424114704105,
+      "imaging_quality": 0.524960030918121,
+      "vbench_total": 0.7570062420722037,
+      "imagebind_audio_video_alignment": 0.22060853205621242,
+      "onset_flow_correlation": 0.0046293259929009465,
+      "retrieval_rank": 1.075,
+      "retrieval_mrr": 0.98125
+    }
+  ],
+  "cases": [
+    {
+      "pair_id": "test:video8010",
+      "caption": "lego stormtroppers are in a facility",
+      "generation_seed": 42,
+      "b0_video": "assets/test-video8010-b0.mp4",
+      "b3_video": "assets/test-video8010-b3.mp4",
+      "b0_seconds": 5.384842282976024,
+      "b3_seconds": 4.657329926034436,
+      "references": [
+        "train:video4516",
+        "train:video4045",
+        "train:video1200"
+      ],
+      "gates": [
+        0.212763,
+        0.239159,
+        0.311302,
+        0.236776
+      ],
+      "note": "Fixed held-out pair; identical generation seed."
+    },
+    {
+      "pair_id": "test:video8721",
+      "caption": "man in grey shirt is having an interview in the building",
+      "generation_seed": 42,
+      "b0_video": "assets/test-video8721-b0.mp4",
+      "b3_video": "assets/test-video8721-b3.mp4",
+      "b0_seconds": 4.16819287405815,
+      "b3_seconds": 4.281987778027542,
+      "references": [
+        "train:video3966",
+        "train:video2800",
+        "train:video3326"
+      ],
+      "gates": [
+        0.230347,
+        0.225926,
+        0.374376,
+        0.16935
+      ],
+      "note": "Fixed held-out pair; identical generation seed."
+    },
+    {
+      "pair_id": "test:video8866",
+      "caption": "a news scene of the dog s exercise and diet",
+      "generation_seed": 42,
+      "b0_video": "assets/test-video8866-b0.mp4",
+      "b3_video": "assets/test-video8866-b3.mp4",
+      "b0_seconds": 4.10424473893363,
+      "b3_seconds": 4.177552158012986,
+      "references": [
+        "train:video3431",
+        "train:video3161",
+        "train:video2851"
+      ],
+      "gates": [
+        0.36291,
+        0.207157,
+        0.302138,
+        0.127794
+      ],
+      "note": "Fixed held-out pair; identical generation seed."
+    },
+    {
+      "pair_id": "test:video7613",
+      "caption": "a female journalist wearing a purple shirt and white blazer is talking on a news show next to the image of a male in a dark suit",
+      "generation_seed": 42,
+      "b0_video": "assets/test-video7613-b0.mp4",
+      "b3_video": "assets/test-video7613-b3.mp4",
+      "b0_seconds": 4.722141731064767,
+      "b3_seconds": 4.492443670053035,
+      "references": [
+        "train:video1448",
+        "train:video3778",
+        "train:video4830"
+      ],
+      "gates": [
+        0.301021,
+        0.307922,
+        0.195845,
+        0.195212
+      ],
+      "note": "Fixed held-out pair; identical generation seed."
+    },
+    {
+      "pair_id": "test:video8494",
+      "caption": "a girl is talking about a celebrity",
+      "generation_seed": 42,
+      "b0_video": "assets/test-video8494-b0.mp4",
+      "b3_video": "assets/test-video8494-b3.mp4",
+      "b0_seconds": 4.210005700937472,
+      "b3_seconds": 4.167917798971757,
+      "references": [
+        "train:video4755",
+        "train:video454",
+        "train:video2328"
+      ],
+      "gates": [
+        0.247048,
+        0.231678,
+        0.303141,
+        0.218134
+      ],
+      "note": "Fixed held-out pair; identical generation seed."
+    },
+    {
+      "pair_id": "test:video8469",
+      "caption": "two parrots in a bird cage one white chick and on green adult",
+      "generation_seed": 42,
+      "b0_video": "assets/test-video8469-b0.mp4",
+      "b3_video": "assets/test-video8469-b3.mp4",
+      "b0_seconds": 4.2626593300374225,
+      "b3_seconds": 4.310003033024259,
+      "references": [
+        "train:video469",
+        "train:video4010",
+        "train:video3599"
+      ],
+      "gates": [
+        0.343451,
+        0.219414,
+        0.247925,
+        0.18921
+      ],
+      "note": "Fixed held-out pair; identical generation seed."
+    },
+    {
+      "pair_id": "test:video7965",
+      "caption": "man driving in a car an talking about the car",
+      "generation_seed": 42,
+      "b0_video": "assets/test-video7965-b0.mp4",
+      "b3_video": "assets/test-video7965-b3.mp4",
+      "b0_seconds": 4.467092072009109,
+      "b3_seconds": 4.296636795974337,
+      "references": [
+        "train:video4412",
+        "train:video2556",
+        "train:video2773"
+      ],
+      "gates": [
+        0.254943,
+        0.225153,
+        0.354352,
+        0.165553
+      ],
+      "note": "Fixed held-out pair; identical generation seed."
+    },
+    {
+      "pair_id": "test:video8780",
+      "caption": "some people are shooting outside",
+      "generation_seed": 42,
+      "b0_video": "assets/test-video8780-b0.mp4",
+      "b3_video": "assets/test-video8780-b3.mp4",
+      "b0_seconds": 4.0292512599844486,
+      "b3_seconds": 4.042888793046586,
+      "references": [
+        "train:video3005",
+        "train:video1182",
+        "train:video4371"
+      ],
+      "gates": [
+        0.309129,
+        0.230603,
+        0.261713,
+        0.198555
+      ],
+      "note": "Fixed held-out pair; identical generation seed."
+    }
+  ]
 }

@@ -21,6 +21,12 @@ from mugen.generation.conditioner import MultimodalConditioner
 from mugen.generation.generators.anyflow_generator import AnyFlowVideoGenerator
 
 
+def apply_condition_scale(bundle, scale):
+    bundle.condition_tokens = bundle.condition_tokens * float(scale)
+    bundle.metadata["condition_scale"] = float(scale)
+    return bundle
+
+
 class MUGenDemo:
     def __init__(self, args):
         if not torch.cuda.is_available():
@@ -108,6 +114,7 @@ class MUGenDemo:
                 reference_embeddings=references,
                 reference_scores=scores,
             )
+        full_bundle = apply_condition_scale(full_bundle, self.args.condition_scale)
         baseline_bundle = ConditionBundle(
             prompt=text,
             image=image,
@@ -133,6 +140,7 @@ class MUGenDemo:
             "adapter_overhead_percent": 100 * (full_seconds - baseline_seconds) / baseline_seconds,
             "peak_vram_gib": peak_vram,
             "condition_tokens": full_bundle.metadata["condition_token_count"],
+            "condition_scale": float(self.args.condition_scale),
         }
         return (
             self._save_video(baseline.video_frames, "b0-baseline"),
@@ -153,6 +161,7 @@ def parse_args():
     parser.add_argument("--width", type=int, default=448)
     parser.add_argument("--steps", type=int, default=4)
     parser.add_argument("--top-k", type=int, default=3)
+    parser.add_argument("--condition-scale", type=float, default=0.1)
     parser.add_argument("--port", type=int, default=7860)
     return parser.parse_args()
 

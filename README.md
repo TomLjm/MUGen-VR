@@ -87,7 +87,8 @@ for partition in 0 1 2 3; do
     --eval-manifest data/msrvtt/project_eval_40.jsonl \
     --feature-store cache/features/msrvtt-real-v1 \
     --lora-checkpoint outputs/lora-project-v1-train-only/checkpoint-300 \
-    --output-dir outputs/project-ablation \
+    --output-dir outputs/project-ablation-final \
+    --condition-scale 0.1 \
     --num-partitions 4 --partition-index $partition \
     > data/msrvtt/generation-part-$partition.log 2>&1 &
 done
@@ -100,26 +101,26 @@ over the AnyFlow environment.
 
 ```bash
 python scripts/eval/evaluate_audio_control.py \
-  --manifest outputs/project-ablation/results-part-*.jsonl \
-  --output reports/project/audio-control.json
+  --manifest outputs/project-ablation-final/results-part-*.jsonl \
+  --output reports/project-final/audio-control.json
 
 for variant in B0 B1 B2 B3; do
   python scripts/eval/run_evaluation.py \
-    --generated_dir outputs/project-ablation/$variant \
-    --output reports/project/vbench/$variant
+    --generated_dir outputs/project-ablation-final/$variant \
+    --output reports/project-final/vbench/$variant
 done
 
 python scripts/eval/merge_project_metrics.py \
-  --generation-dir outputs/project-ablation \
+  --generation-dir outputs/project-ablation-final \
   --retrieval reports/project/retrieval.json \
-  --audio reports/project/audio-control.json \
-  --vbench-root reports/project/vbench \
-  --output reports/project/ablation-input.jsonl
+  --audio reports/project-final/audio-control.json \
+  --vbench-root reports/project-final/vbench \
+  --output reports/project-final/ablation-input.jsonl
 
 python scripts/eval/ablation_study.py \
-  --input reports/project/ablation-input.jsonl \
+  --input reports/project-final/ablation-input.jsonl \
   --case-manifest data/msrvtt/project_cases_8.jsonl \
-  --output reports/project/final-report.json
+  --output reports/project-final/final-report.json
 ```
 
 
@@ -178,8 +179,11 @@ reports/          # generated reports, not model outputs
 
 - ImageBind real text/image encoding: verified at `(1, 1024)` with unit-norm output.
 - InternVideo2 real video encoding: verified at `(1, 768)` with unit-norm output.
-- Unit and CPU integration tests: required before every release commit.
-- Held-out B0-B3 generation gains: not yet claimed; completion requires 30-50 fixed samples, one generation seed, key metrics, and 6-10 side-by-side cases. Bootstrap remains an optional diagnostic.
+- Formal real-feature training: 2,000 Fusion steps and 300 four-GPU AnyFlow LoRA steps with train-only references.
+- Fixed 40-sample, seed-42 evaluation and eight side-by-side cases: completion check passed.
+- Validation-selected condition scale `0.1` reduced B3 VBench degradation from `0.7260` to `0.7570`; B0 remained best at `0.7600`, while B2 reached `0.7596`.
+- Final B2/B3 retrieval MRR: `1.0000` / `0.9813`; final B3 audio-flow correlation: `0.0046`. These results do not support a quality-improvement claim.
+- Four-step latency: B0 `4.42 s`, B3 `4.31 s`; peak VRAM `15.61 GiB` on one RTX 3090.
 
 UMT5, VAE, and the base AnyFlow transformer remain frozen. Trainable parameters are
 MUGen Fusion, Reference Adapter, the 4096-dimensional condition projector, and LoRA

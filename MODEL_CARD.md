@@ -35,16 +35,20 @@ features. Users must obtain those assets under their upstream terms.
 The practical project evaluation compares four variants on 40 fixed held-out samples
 with generation seed 42:
 
-| Variant | Definition | Status |
-|---|---|---|
-| B0 | AnyFlow image + original prompt | pending final run |
-| B1 | prompt rewrite prototype | pending final run |
-| B2 | Fusion tokens without audio/reference | pending final run |
-| B3 | full Fusion + audio + reference | pending final run |
+Condition scale `0.1` was selected on eight validation samples before the fixed test run.
 
-Reported metrics include key VBench dimensions, retrieval R@1/5/10 and MRR,
-audio-onset/optical-flow correlation, latency, generated FPS, and peak VRAM. No quality
-improvement is claimed until the real held-out report is attached.
+| Variant | Definition | VBench | Retrieval MRR | Audio-flow | Latency |
+|---|---|---:|---:|---:|---:|
+| B0 | AnyFlow image + original prompt | 0.7600 | n/a | 0.0179 | 4.42 s |
+| B1 | prompt rewrite prototype | 0.7511 | n/a | 0.0363 | 4.26 s |
+| B2 | Fusion tokens without audio/reference | 0.7596 | 1.0000 | -0.0012 | 4.28 s |
+| B3 | full Fusion + audio + reference | 0.7570 | 0.9813 | 0.0046 | 4.31 s |
+
+The completion check passed for all 40 pairs, four variants, one seed, required metrics,
+and eight showcase cases. B0 remained the strongest VBench baseline. B2 preserved quality
+within 0.0004, while audio/reference conditioning in B3 did not improve retrieval, audio
+control, or aggregate video quality. The release therefore claims a reproducible real
+condition path and an honest negative result, not a generation-quality gain.
 
 ## Limitations
 
@@ -52,6 +56,7 @@ improvement is claimed until the real held-out report is attached.
 - ImageBind is also governed by non-commercial research terms.
 - Audio control is indirect through condition tokens; it does not synthesize an output soundtrack.
 - Retrieval quality depends on the licensed local reference gallery.
+- On this checkpoint, adding audio and reference tokens slightly reduced aggregate VBench and retrieval MRR.
 - The project is evaluated as an internship portfolio system, not a paper-scale benchmark.
 
 ## Citation

@@ -6,7 +6,7 @@
 - Designed HierarchicalConditionFusion and a score-aware Reference Adapter; restricted rank-16 LoRA updates to 240 cross-attention q/k/v/out tensors while freezing UMT5, VAE, and the base video transformer.
 - Built a leakage-aware MSR-VTT data pipeline with deterministic train/val/test splits, media/audio SHA-256, decodability checks, resumable four-GPU `safetensors + JSONL` feature extraction, and explicit bad-sample tracking.
 - Implemented real MP4/VBench evaluation, retrieval R@K/MRR, audio-onset/optical-flow correlation, latency/VRAM profiling, and a fixed 40-sample B0-B3 comparison with eight side-by-side cases.
-- Verified a 25-frame 256x448 AnyFlow engineering baseline at 4.12 s, 6.07 generated FPS, and 15.47 GiB peak VRAM on one RTX 3090; final quality metrics are reported only from the held-out run.
+- Used val-only scale calibration to recover B3 VBench from 0.7260 to 0.7570; reported that B0 remained best at 0.7600 and B2 preserved quality at 0.7596, avoiding an unsupported improvement claim.
 
 ## 90-second project explanation
 
@@ -40,6 +40,8 @@ that do not redistribute upstream weights.
 - 25/49-frame inference inherited the 81-frame chunk schedule. Added automatic latent chunk partitioning.
 - LoRA training initially passed `[B,C,T,H,W]` to an API expecting `[B,T,C,H,W]`. Added a regression test.
 - Generic accelerator state duplicated 2.86 GB of frozen base weights. Replaced it with lightweight LoRA, conditioner, optimizer, and RNG checkpoints.
+- The first formal LoRA run retrieved references from all feature splits. Kept it as a diagnostic artifact, restricted the gallery to train rows, and retrained from scratch before final evaluation.
+- Full-strength condition tokens reduced subject consistency. Selected scale 0.1 on eight validation clips; this nearly restored baseline VBench, but audio/reference tokens still did not beat B0.
 
 ## Interview questions and answers
 
@@ -61,7 +63,7 @@ that do not redistribute upstream weights.
 16. **What did the 15.47 GiB number measure?**  A real 25-frame, 256x448, one-step AnyFlow generation smoke, including the loaded pipeline and generation allocations.
 17. **Can the weights be commercialized?**  No. The base AnyFlow and ImageBind terms restrict usage; the repository and model card state non-commercial research use.
 18. **What is published on Hugging Face?**  Only MUGen-owned Fusion, Reference Adapter, projector, LoRA, configs, and metrics; no upstream weights or dataset media.
-19. **What would you optimize next?**  Compare 4/8 condition tokens, top-k 1/3/5, and rank 16/32 only if the compact B0-B3 run shows a specific bottleneck.
+19. **What would you optimize next?**  The bottleneck is no longer token magnitude: scale 0.1 restored most VBench quality. Next I would add reference confidence rejection, supervise audio tokens with onset-aware objectives, and freeze Fusion longer before jointly tuning LoRA.
 20. **What is the strongest engineering contribution?**  Turning an apparently multimodal prompt prototype into a real, testable condition path with reproducible data, constrained parameter updates, and honest evaluation.
 
 ## Presentation outline
