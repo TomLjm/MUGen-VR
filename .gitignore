@@ -18,7 +18,8 @@ checkpoints/
 models/
 /data/
 outputs/
-reports/generated/
+reports/**
+/release/
 outputs/*.gif
 outputs/*.mp4
 outputs/*.pt
