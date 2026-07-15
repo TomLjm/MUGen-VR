@@ -50,3 +50,16 @@ def test_practical_completion_check_uses_four_variants_and_fixed_seed():
         for variant in ABLATION.VARIANTS
     ]
     assert ABLATION.completion_check(rows, case_count=6)["passed"]
+
+
+def test_bootstrap_excludes_variant_aggregate_vbench_metrics():
+    rows = [
+        {
+            "pair_id": "a",
+            "variant": "B0",
+            "metrics": {"vbench_total": 0.7, "latency_seconds": 1.0},
+        }
+    ]
+    filtered = ABLATION.per_sample_bootstrap_rows(rows)
+
+    assert filtered[0]["metrics"] == {"latency_seconds": 1.0}

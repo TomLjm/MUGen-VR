@@ -24,6 +24,15 @@ COMMON_REQUIRED_METRICS = {
     "latency_seconds",
     "peak_vram_gib",
 }
+PER_SAMPLE_BOOTSTRAP_METRICS = {
+    "latency_seconds",
+    "generated_fps",
+    "peak_vram_gib",
+    "imagebind_audio_video_alignment",
+    "onset_flow_correlation",
+    "retrieval_rank",
+    "retrieval_mrr",
+}
 
 
 def parse_args():
@@ -59,6 +68,20 @@ def summarize(rows):
     }
 
 
+def per_sample_bootstrap_rows(rows):
+    return [
+        {
+            **row,
+            "metrics": {
+                key: value
+                for key, value in row.get("metrics", {}).items()
+                if key in PER_SAMPLE_BOOTSTRAP_METRICS
+            },
+        }
+        for row in rows
+    ]
+
+
 def completion_check(rows, case_count=None):
     pair_variants = defaultdict(set)
     seeds = set()
@@ -91,7 +114,7 @@ def main():
         raise ValueError(f"ablation input is missing variants: {sorted(missing)}")
     summary = summarize(rows)
     comparisons = compare_full_to_best_baselines(
-        rows,
+        per_sample_bootstrap_rows(rows),
         full_variant="B3",
         baseline_variants=("B0", "B1", "B2"),
         higher_is_better={metric: False for metric in LOWER_IS_BETTER},
