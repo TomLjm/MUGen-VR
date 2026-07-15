@@ -101,6 +101,16 @@ def test_vbench_adapter_uses_official_custom_input_api(monkeypatch, tmp_path):
     assert calls["evaluate"]["local"] is True
 
 
+def test_vbench_adapter_installs_numpy_two_imgaug_compat(monkeypatch):
+    import numpy as np
+
+    monkeypatch.delattr(np, "sctypes", raising=False)
+    VBenchAdapter._install_numpy_compat()
+
+    assert set(np.sctypes) == {"float", "int", "uint"}
+    assert np.float32 in np.sctypes["float"]
+
+
 def test_condition_bundle_appends_tokens():
     bundle = ConditionBundle(
         prompt="test",

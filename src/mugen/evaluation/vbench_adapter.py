@@ -30,12 +30,24 @@ class VBenchAdapter(BaseEvaluator):
 
         return VBench, source_path
 
+    @staticmethod
+    def _install_numpy_compat():
+        import numpy as np
+
+        if not hasattr(np, "sctypes"):
+            np.sctypes = {
+                "float": [np.float16, np.float32, np.float64, np.longdouble],
+                "int": [np.int8, np.int16, np.int32, np.int64],
+                "uint": [np.uint8, np.uint16, np.uint32, np.uint64],
+            }
+
     def _init_evaluator(self):
         if self.available is not None:
             return
         try:
             import torch
 
+            self._install_numpy_compat()
             vbench_class, source_path = self._load_vbench_class()
             self.output_path.mkdir(parents=True, exist_ok=True)
             self.evaluator = vbench_class(
