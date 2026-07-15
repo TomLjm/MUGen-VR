@@ -22,7 +22,8 @@ def summarize_gates(gates):
     values = np.asarray(gates, dtype=np.float64)
     if values.ndim < 1:
         return []
-    return values.reshape(-1, values.shape[-1]).mean(axis=0).tolist()
+    means = values.reshape(-1, values.shape[-1]).mean(axis=0)
+    return [round(float(value), 6) for value in means]
 
 
 def build_space(ablation_rows, report, cases, output_dir, existing_results):
