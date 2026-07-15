@@ -1,0 +1,29 @@
+model:
+  base: nvidia/AnyFlow-FAR-Wan2.1-1.3B-Diffusers
+  fusion_checkpoint: outputs/fusion-real-v1/best-seed-42.pt
+  reference_tokens: 4
+  lora:
+    rank: 16
+    alpha: 32
+
+training:
+  seed: 42
+  batch_size: 1
+  learning_rate: 5.0e-5
+  weight_decay: 0.01
+  max_steps: 300
+  gradient_accumulation_steps: 2
+  mixed_precision: bf16
+  gradient_checkpointing: true
+  grad_clip: 1.0
+  num_train_timesteps: 1000
+  checkpoint_interval: 50
+  output_dir: outputs/lora-project-v1
+
+data:
+  feature_store: cache/features/msrvtt-real-v1
+  num_frames: 25
+  height: 256
+  width: 448
+  latent_chunk_size: 2
+  reference_top_k: 3
