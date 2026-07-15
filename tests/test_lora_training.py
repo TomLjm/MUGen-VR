@@ -27,6 +27,16 @@ def test_flow_matching_endpoints_and_target():
     assert torch.equal(target, noise - clean)
 
 
+def test_reference_retrieval_is_restricted_to_explicit_train_gallery():
+    features = torch.eye(4)
+    references, _ = MODULE.retrieve_reference(
+        features, index=3, top_k=3, gallery_indices=torch.tensor([0, 1, 2])
+    )
+
+    assert references.shape == (3, 4)
+    assert not torch.any(torch.all(references == features[3], dim=-1))
+
+
 def test_decode_video_contract_is_channel_first_before_batching(monkeypatch):
     decoded = torch.zeros(3, 25, 16, 24)
     monkeypatch.setattr(MODULE, "decode_video", lambda *args, **kwargs: decoded)

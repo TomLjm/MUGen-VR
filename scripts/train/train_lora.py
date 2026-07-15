@@ -78,12 +78,15 @@ def decode_video(path: str, num_frames: int, height: int, width: int) -> torch.T
     return torch.stack(frames, dim=1)
 
 
-def retrieve_reference(features, index: int, top_k: int):
+def retrieve_reference(features, index: int, top_k: int, gallery_indices):
+    gallery_indices = torch.as_tensor(gallery_indices, dtype=torch.long)
+    gallery_indices = gallery_indices[gallery_indices != index]
+    if not len(gallery_indices):
+        raise ValueError("reference gallery is empty after excluding the query")
     query = F.normalize(features[index].float(), dim=-1)
-    scores = F.normalize(features.float(), dim=-1) @ query
-    scores[index] = -torch.inf
-    values, indices = scores.topk(min(top_k, len(scores) - 1))
-    return features[indices], values
+    scores = F.normalize(features[gallery_indices].float(), dim=-1) @ query
+    values, positions = scores.topk(min(top_k, len(scores)))
+    return features[gallery_indices[positions]], values
 
 
 def sample_indices(indices, batch_size, generator):
@@ -106,10 +109,14 @@ def load_conditioner(tensors, checkpoint_path, generator_dim, reference_tokens, 
     return conditioner.to(device)
 
 
-def build_condition_tokens(conditioner, tensors, records, indices, top_k, device):
+def build_condition_tokens(
+    conditioner, tensors, records, indices, top_k, reference_gallery_indices, device
+):
     bundles = []
     for index in indices:
-        references, scores = retrieve_reference(tensors["video"], index, top_k)
+        references, scores = retrieve_reference(
+            tensors["video"], index, top_k, reference_gallery_indices
+        )
         embeddings = {
             name: tensors[name][index].unsqueeze(0).to(device)
             for name in ["text", "image", "audio"]
@@ -166,6 +173,7 @@ def forward_loss(
     device,
     dtype,
     chunks,
+    reference_gallery_indices,
 ):
     clean = encode_latents(
         pipeline,
@@ -188,6 +196,7 @@ def forward_loss(
         records,
         batch,
         int(config.data.reference_top_k),
+        reference_gallery_indices,
         device,
     )
     prompt_embeds = encode_prompts(
@@ -364,6 +373,7 @@ def main():
                     accelerator.device,
                     dtype,
                     chunks,
+                    train_indices,
                 )
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
@@ -391,6 +401,7 @@ def main():
                             accelerator.device,
                             dtype,
                             chunks,
+                            train_indices,
                         )
                     val_loss = float(accelerator.gather(val_loss.detach()).mean())
                     event["validation_loss"] = val_loss
