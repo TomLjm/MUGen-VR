@@ -78,6 +78,7 @@ class VBenchAdapter(BaseEvaluator):
                 prompt_list=[],
                 dimension_list=self.dimensions,
                 mode="custom_input",
+                local=True,
             )
             result_path = self.output_path / f"{name}_eval_results.json"
             raw = json.loads(result_path.read_text(encoding="utf-8"))
