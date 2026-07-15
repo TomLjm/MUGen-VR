@@ -1,6 +1,7 @@
 ---
 library_name: diffusers
-license: mit
+license: other
+license_name: mit-code-with-noncommercial-upstream-weight-restrictions
 base_model: nvidia/AnyFlow-FAR-Wan2.1-1.3B-Diffusers
 pipeline_tag: image-to-video
 tags:
