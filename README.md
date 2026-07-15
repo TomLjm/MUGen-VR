@@ -55,9 +55,71 @@ Train AnyFlow cross-attention LoRA plus the condition projector (one process per
 
 ```bash
 accelerate launch --num_processes 4 scripts/train/train_lora.py \
-  --config configs/training/lora.yaml \
+  --config configs/training/lora_project.yaml \
   --feature-store cache/features/msrvtt-real-v1 \
-  --fusion-checkpoint outputs/fusion/best-seed-42.pt
+  --fusion-checkpoint outputs/fusion-real-v1/best-seed-42.pt \
+  --output-dir outputs/lora-project-v1-train-only
+```
+
+## Fixed B0-B3 Evaluation
+
+Build the local 40-sample held-out manifest and eight-case showcase from the exact
+feature-extraction subset. Generated manifests remain local because they contain media paths.
+
+```bash
+python scripts/eval/build_project_eval_manifest.py \
+  --media-manifest data/msrvtt/media_manifest_v1_6000.jsonl \
+  --output data/msrvtt/project_eval_40.jsonl \
+  --case-output data/msrvtt/project_cases_8.jsonl
+```
+
+Evaluate retrieval, then generate one deterministic partition per GPU:
+
+```bash
+python scripts/eval/evaluate_project_retrieval.py \
+  --eval-manifest data/msrvtt/project_eval_40.jsonl \
+  --feature-store cache/features/msrvtt-real-v1 \
+  --conditioner-checkpoint outputs/lora-project-v1-train-only/checkpoint-300/conditioner.pt \
+  --output reports/project/retrieval.json
+
+for partition in 0 1 2 3; do
+  CUDA_VISIBLE_DEVICES=$partition python scripts/eval/generate_project_ablation.py \
+    --eval-manifest data/msrvtt/project_eval_40.jsonl \
+    --feature-store cache/features/msrvtt-real-v1 \
+    --lora-checkpoint outputs/lora-project-v1-train-only/checkpoint-300 \
+    --output-dir outputs/project-ablation \
+    --num-partitions 4 --partition-index $partition \
+    > data/msrvtt/generation-part-$partition.log 2>&1 &
+done
+wait
+```
+
+Run the real-video metrics and strict completion report. VBench is imported from the pinned
+source checkout in `third_party/VBench`; its pinned Transformers dependency is not installed
+over the AnyFlow environment.
+
+```bash
+python scripts/eval/evaluate_audio_control.py \
+  --manifest outputs/project-ablation/results-part-*.jsonl \
+  --output reports/project/audio-control.json
+
+for variant in B0 B1 B2 B3; do
+  python scripts/eval/run_evaluation.py \
+    --generated_dir outputs/project-ablation/$variant \
+    --output reports/project/vbench/$variant
+done
+
+python scripts/eval/merge_project_metrics.py \
+  --generation-dir outputs/project-ablation \
+  --retrieval reports/project/retrieval.json \
+  --audio reports/project/audio-control.json \
+  --vbench-root reports/project/vbench \
+  --output reports/project/ablation-input.jsonl
+
+python scripts/eval/ablation_study.py \
+  --input reports/project/ablation-input.jsonl \
+  --case-manifest data/msrvtt/project_cases_8.jsonl \
+  --output reports/project/final-report.json
 ```
 
 
