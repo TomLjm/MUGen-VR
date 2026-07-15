@@ -12,6 +12,7 @@ build/
 *.pid
 .DS_Store
 .cache/
+.checkpoints/
 cache/
 checkpoints/
 models/
