@@ -42,6 +42,8 @@ def save_video(frames, path, fps=8):
 def gather_reference_embeddings(gallery, indices):
     """Keep the reference-adapter contract as [batch, top_k, feature_dim]."""
     references = gallery[indices]
+    if references.ndim == 2:
+        references = references.unsqueeze(0)
     if references.ndim != 3:
         raise ValueError(f"expected 3D reference embeddings, got {tuple(references.shape)}")
     return references

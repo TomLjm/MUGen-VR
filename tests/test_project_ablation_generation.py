@@ -23,7 +23,7 @@ def test_prompt_rewrite_remains_a_text_only_historical_baseline():
 
 def test_reference_gather_preserves_batch_top_k_feature_contract():
     gallery = torch.randn(10, 8)
-    indices = torch.tensor([[1, 4, 7]])
+    indices = torch.tensor([1, 4, 7])
 
     references = MODULE.gather_reference_embeddings(gallery, indices)
 
