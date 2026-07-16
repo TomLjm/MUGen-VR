@@ -1,9 +1,5 @@
 # Experiment Status
 
-This is a resume and interview project, not a paper submission. Release metrics must
-still come from real held-out media, but the evaluation is intentionally compact.
-Smoke artifacts, dummy videos, and `skipped` metrics are not accepted as evidence.
-
 ## Verified engineering smoke
 
 | Component | Result |
