@@ -1,49 +1,90 @@
 # MUGen-VR
 
-**Unified Multimodal Representation + Retrieve-then-Generate + Robust Condition Fusion**
+Multimodal condition-token injection and retrieval-augmented video generation on AnyFlow.
 
-MUGen-VR is a multimodal video system for understanding, retrieval, and controllable generation. Foundation models are used as frozen backbones; the project-owned contribution is the trainable condition layer that fuses multimodal inputs, retrieves reference videos, injects reference features into generation, and reports what worked or failed.
+[Hugging Face Model](https://huggingface.co/TomLjm/MUGen-VR-AnyFlow-Conditioner) | [Evaluation Space](https://huggingface.co/spaces/TomLjm/MUGen-VR-Evaluation)
+
+MUGen-VR combines ImageBind text, image, and audio features with InternVideo2 video
+features. A trainable conditioner produces three fusion tokens and four retrieved-reference
+tokens, projects them into the UMT5 embedding space, and appends them directly to AnyFlow
+`prompt_embeds`. AnyFlow is adapted through cross-attention LoRA while its text encoder,
+VAE, and base transformer remain frozen.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  A[Text / Image / Audio / Video] --> B[Backbone Encoders]
-  B --> C[HierarchicalConditionFusion]
-  C --> D[Cross-modal Retrieval]
-  D --> E[ReferenceAdapter]
-  C --> F[Condition Assembly]
-  E --> F
-  F --> G[7 condition tokens in UMT5 space]
-  G --> I[AnyFlow cross-attention + LoRA]
-  I --> H[Unified Evaluation Report]
-  D --> H
-  C --> H
+  A[Text / Image / Audio] --> B[ImageBind]
+  V[Reference videos] --> C[InternVideo2 index]
+  B --> D[HierarchicalConditionFusion]
+  D --> E[Cross-modal retrieval]
+  C --> E
+  E --> F[ReferenceAdapter]
+  D --> G[Condition projector]
+  F --> G
+  G --> H[7 tokens in UMT5 space]
+  H --> I[AnyFlow cross-attention + LoRA]
+  I --> J[Generated video]
 ```
 
-## Highlights
+Core components:
 
-- `HierarchicalConditionFusion`: projects text, image, and audio conditions into a shared space and exposes modality weights.
-- `Real multimodal features`: ImageBind text/image/audio features and InternVideo2 video/reference features are stored in versioned `safetensors + JSONL` shards.
-- `Reference-guided Retrieve-then-Generate`: self-excluding top-k retrieval is aggregated into four score-aware reference tokens.
-- `Direct AnyFlow injection`: three fusion tokens and four reference tokens are projected into the 4096-dimensional UMT5 space and appended to `prompt_embeds`.
-- `Practical evaluation`: release evaluation decodes real MP4 files and compares four job-relevant ablations on held-out VBench, retrieval, audio-flow, latency, and VRAM metrics.
+- `HierarchicalConditionFusion` maps text, image, and audio features to three condition tokens.
+- `ReferenceAdapter` aggregates top-k retrieved videos into four score-aware tokens.
+- `MultimodalConditioner` adds modality/type embeddings and projects all seven tokens to 4096 dimensions.
+- `ConditionBundle` carries normalized prompt, image, audio, reference, mask, and trace metadata.
+- `AnyFlowVideoGenerator` consumes the bundle through direct `prompt_embeds` injection.
 
-## Quick Start
+## Results
+
+Evaluation uses 40 fixed held-out MSR-VTT clips, generation seed 42, and a condition
+scale selected on eight validation clips. Metrics are computed from decoded MP4 files.
+
+| Variant | Definition | VBench | Retrieval MRR | Audio-flow | Latency |
+|---|---|---:|---:|---:|---:|
+| B0 | AnyFlow image + original prompt | 0.7600 | n/a | 0.0179 | 4.42 s |
+| B1 | Prompt rewrite prototype | 0.7511 | n/a | 0.0363 | 4.26 s |
+| B2 | Fusion tokens without audio/reference | 0.7596 | 1.0000 | -0.0012 | 4.28 s |
+| B3 | Full fusion + audio + reference | 0.7570 | 0.9813 | 0.0046 | 4.31 s |
+
+B2 preserves baseline VBench within `0.0004`. The current B3 checkpoint does not improve
+aggregate generation quality, retrieval, or audio control, so no improvement claim is made.
+Peak inference memory is `15.61 GiB` on one RTX 3090.
+
+See [docs/experiments.md](docs/experiments.md) for the evaluation protocol and commands.
+
+## Installation
 
 ```bash
+conda create -n mugen python=3.10 -y
+conda activate mugen
 pip install -e .
-python -c "import mugen; print('ok')"
 python -m pytest -q
-python scripts/prepare_data/build_msrvtt_manifest.py --help
-python scripts/extract_features/extract_real_features.py --help
 ```
 
-The CPU smoke test does not download model weights or generate fake release metrics.
-Real training requires locally installed third-party repositories, their upstream
-checkpoints, and an MSR-VTT media manifest with decodable audio.
+The CPU test suite does not download model weights. Full training and generation require
+local copies of the upstream repositories and checkpoints listed in
+[`third_party/manifest.yaml`](third_party/manifest.yaml).
 
-Train the project-owned fusion and reference modules from real cached features:
+## Data And Features
+
+MUGen-VR does not distribute MSR-VTT media or cached third-party features. Build a local
+manifest, then extract versioned `safetensors + JSONL` feature shards:
+
+```bash
+python scripts/prepare_data/build_msrvtt_manifest.py --help
+python scripts/extract_features/extract_real_features.py \
+  --manifest data/msrvtt/media_manifest.jsonl \
+  --output cache/features/msrvtt-real-v1 \
+  --resume
+```
+
+Splits are isolated by `video_id`. Reference retrieval excludes the query video and
+near-duplicate media hashes.
+
+## Training
+
+Train the fusion and reference modules:
 
 ```bash
 python scripts/train/train_fusion.py \
@@ -51,7 +92,7 @@ python scripts/train/train_fusion.py \
   --feature-store cache/features/msrvtt-real-v1
 ```
 
-Train AnyFlow cross-attention LoRA plus the condition projector (one process per GPU):
+Train the condition projector and AnyFlow cross-attention LoRA:
 
 ```bash
 accelerate launch --num_processes 4 scripts/train/train_lora.py \
@@ -61,148 +102,40 @@ accelerate launch --num_processes 4 scripts/train/train_lora.py \
   --output-dir outputs/lora-project-v1-train-only
 ```
 
-## Fixed B0-B3 Evaluation
+The final run used 2,000 fusion steps and 300 four-GPU LoRA steps with a train-only
+reference gallery. Checkpoints include optimizer state, RNG state, feature versions,
+and configuration for deterministic resume.
 
-Build the local 40-sample held-out manifest and eight-case showcase from the exact
-feature-extraction subset. Generated manifests remain local because they contain media paths.
+## Demo
 
-```bash
-python scripts/eval/build_project_eval_manifest.py \
-  --media-manifest data/msrvtt/media_manifest_v1_6000.jsonl \
-  --output data/msrvtt/project_eval_40.jsonl \
-  --case-output data/msrvtt/project_cases_8.jsonl
-```
-
-Evaluate retrieval, then generate one deterministic partition per GPU:
+The local demo runs B0 and B3 side by side and displays retrieved references, gating
+weights, and latency:
 
 ```bash
-python scripts/eval/evaluate_project_retrieval.py \
-  --eval-manifest data/msrvtt/project_eval_40.jsonl \
-  --feature-store cache/features/msrvtt-real-v1 \
-  --conditioner-checkpoint outputs/lora-project-v1-train-only/checkpoint-300/conditioner.pt \
-  --output reports/project/retrieval.json
-
-for partition in 0 1 2 3; do
-  CUDA_VISIBLE_DEVICES=$partition python scripts/eval/generate_project_ablation.py \
-    --eval-manifest data/msrvtt/project_eval_40.jsonl \
-    --feature-store cache/features/msrvtt-real-v1 \
-    --lora-checkpoint outputs/lora-project-v1-train-only/checkpoint-300 \
-    --output-dir outputs/project-ablation-final \
-    --condition-scale 0.1 \
-    --num-partitions 4 --partition-index $partition \
-    > data/msrvtt/generation-part-$partition.log 2>&1 &
-done
-wait
+python scripts/demo/gradio_app.py --help
 ```
 
-Run the real-video metrics and strict completion report. VBench is imported from the pinned
-source checkout in `third_party/VBench`; its pinned Transformers dependency is not installed
-over the AnyFlow environment.
+The hosted Space is a static evaluation viewer and does not run persistent GPU inference.
 
-```bash
-python scripts/eval/evaluate_audio_control.py \
-  --manifest outputs/project-ablation-final/results-part-*.jsonl \
-  --output reports/project-final/audio-control.json
-
-for variant in B0 B1 B2 B3; do
-  python scripts/eval/run_evaluation.py \
-    --generated_dir outputs/project-ablation-final/$variant \
-    --output reports/project-final/vbench/$variant
-done
-
-python scripts/eval/merge_project_metrics.py \
-  --generation-dir outputs/project-ablation-final \
-  --retrieval reports/project/retrieval.json \
-  --audio reports/project-final/audio-control.json \
-  --vbench-root reports/project-final/vbench \
-  --output reports/project-final/ablation-input.jsonl
-
-python scripts/eval/ablation_study.py \
-  --input reports/project-final/ablation-input.jsonl \
-  --case-manifest data/msrvtt/project_cases_8.jsonl \
-  --output reports/project-final/final-report.json
-```
-
-Stage the Hugging Face Model upload from an explicit whitelist:
-
-```bash
-python scripts/release/package_hf_model.py \
-  --checkpoint outputs/lora-project-v1-train-only/checkpoint-300 \
-  --evaluation reports/project-final/final-report.json \
-  --output release/hf_model \
-  --condition-scale 0.1
-```
-
-This copies only MUGen-owned conditioner/LoRA weights, sanitized configuration,
-evaluation, checksums, and the Model Card. It excludes optimizer state, upstream
-weights, media, and cached features.
-
-
-## Showcase: Multimodal Condition Path
-
-The public demo is a video-first showcase. The report is included for explainability, but the primary artifact is the generated MP4:
-
-```bash
-python scripts/showcase/run_multimodal_showcase.py \
-  --mode report \
-  --prompt "a dog running on grass with cinematic motion" \
-  --image third_party/ImageBind/.assets/dog_image.jpg \
-  --output_dir outputs/showcase/multimodal_report_only
-```
-
-This produces:
-
-- `result.mp4` when `--mode generate` is used and a GPU is available.
-- `report.md` / `report.json` for the explainable condition trace.
-- `gating_weights.json` and `retrieval_results.json` for the multimodal condition summary.
-
-For a report-only dry run:
-
-```bash
-python scripts/showcase/run_multimodal_showcase.py \
-  --mode report \
-  --prompt "a dog running on grass with upbeat rhythmic background music" \
-  --image third_party/ImageBind/.assets/dog_image.jpg
-```
-
-The showcase script is retained as a historical prototype and must not be used for
-release claims. The release path is `real media -> feature store -> fusion/reference
-training -> condition tokens -> AnyFlow prompt_embeds -> real MP4 -> strict evaluation`.
-
-## Backbones
-
-- InternVideo for video understanding and retrieval features.
-- ImageBind for multimodal embedding prototypes.
-- AnyFlow-FAR / Diffusers for video generation.
-- VBench for optional video generation evaluation.
-
-Backbones are not vendored as trained weights. Their licenses and model cards should be checked before redistribution.
-
-## Project Layout
+## Repository Layout
 
 ```text
-src/mugen/        # project-owned package
-scripts/          # training, inference, and evaluation entrypoints
-configs/          # data, training, inference, and evaluation configs
-docs/             # architecture, method, experiments, third-party commits
-tests/            # smoke and unit tests
-reports/          # generated reports, not model outputs
+src/mugen/       project-owned Python package
+scripts/         data, training, inference, evaluation, and release entrypoints
+configs/         reproducible experiment configuration
+tests/           unit, integration, and resume tests
+hf_space/        static B0/B3 evaluation viewer
 ```
 
-## Verified Status
+## Limitations
 
-- ImageBind real text/image encoding: verified at `(1, 1024)` with unit-norm output.
-- InternVideo2 real video encoding: verified at `(1, 768)` with unit-norm output.
-- Formal real-feature training: 2,000 Fusion steps and 300 four-GPU AnyFlow LoRA steps with train-only references.
-- Fixed 40-sample, seed-42 evaluation and eight side-by-side cases: completion check passed.
-- Validation-selected condition scale `0.1` reduced B3 VBench degradation from `0.7260` to `0.7570`; B0 remained best at `0.7600`, while B2 reached `0.7596`.
-- Final B2/B3 retrieval MRR: `1.0000` / `0.9813`; final B3 audio-flow correlation: `0.0046`. These results do not support a quality-improvement claim.
-- Four-step latency: B0 `4.42 s`, B3 `4.31 s`; peak VRAM `15.61 GiB` on one RTX 3090.
-
-UMT5, VAE, and the base AnyFlow transformer remain frozen. Trainable parameters are
-MUGen Fusion, Reference Adapter, the 4096-dimensional condition projector, and LoRA
-weights restricted to AnyFlow cross-attention `q/k/v/out` projections.
+- Audio control is indirect through condition tokens and does not synthesize a soundtrack.
+- Retrieval depends on a separately licensed local reference gallery.
+- The released checkpoint does not outperform the B0 baseline on aggregate VBench.
+- Reproduction requires upstream models that are not redistributed by this repository.
 
 ## License
 
-MIT for project-owned code. Third-party backbones keep their original licenses.
+Project-owned code is released under MIT. AnyFlow and ImageBind retain non-commercial
+upstream restrictions. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) before using
+the model or generated assets.

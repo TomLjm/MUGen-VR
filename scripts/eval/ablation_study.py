@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize the four resume-project ablations with optional bootstrap diagnostics."""
+"""Summarize the fixed B0-B3 ablations with optional bootstrap diagnostics."""
 
 from __future__ import annotations
 

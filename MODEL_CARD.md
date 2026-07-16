@@ -11,55 +11,49 @@ tags:
   - retrieval
 ---
 
-# MUGen-VR
+# MUGen-VR AnyFlow Conditioner
 
-MUGen-VR adds project-owned multimodal condition modules to AnyFlow-FAR. ImageBind
-encodes text, image, and audio; InternVideo2 encodes videos and retrieved references.
-Three hierarchical fusion tokens and four score-aware reference tokens are projected
-to the 4096-dimensional UMT5 prompt space and appended to AnyFlow `prompt_embeds`.
+MUGen-VR adds a trainable multimodal condition path to AnyFlow-FAR. ImageBind encodes
+text, image, and audio inputs; InternVideo2 encodes videos and retrieved references.
+Three fusion tokens and four reference tokens are projected into the 4096-dimensional
+UMT5 space and appended to AnyFlow `prompt_embeds`.
 
-## Published files
+## Files
 
-The Hugging Face release contains only MUGen-owned lightweight files:
+The release contains only project-owned lightweight artifacts:
 
-- Fusion and Reference Adapter weights.
-- The condition projector and modality/type embeddings.
+- Fusion, Reference Adapter, condition projector, and modality/type embeddings.
 - AnyFlow cross-attention LoRA weights.
-- Training configuration, encoder/data versions, and evaluation metadata.
+- Sanitized training configuration, evaluation metadata, and checksums.
 
-It does not contain AnyFlow, ImageBind, InternVideo2, MSR-VTT media, or cached third-party
-features. Users must obtain those assets under their upstream terms.
+It excludes AnyFlow, ImageBind, and InternVideo2 weights, MSR-VTT media, cached features,
+and optimizer state. These dependencies must be obtained under their upstream terms.
 
 ## Evaluation
 
-The practical project evaluation compares four variants on 40 fixed held-out samples
-with generation seed 42:
+The fixed evaluation uses 40 held-out samples with generation seed 42. Condition scale
+`0.1` was selected on eight validation samples.
 
-Condition scale `0.1` was selected on eight validation samples before the fixed test run.
+| Variant | VBench | Retrieval MRR | Audio-flow | Latency |
+|---|---:|---:|---:|---:|
+| B0 | 0.7600 | n/a | 0.0179 | 4.42 s |
+| B1 | 0.7511 | n/a | 0.0363 | 4.26 s |
+| B2 | 0.7596 | 1.0000 | -0.0012 | 4.28 s |
+| B3 | 0.7570 | 0.9813 | 0.0046 | 4.31 s |
 
-| Variant | Definition | VBench | Retrieval MRR | Audio-flow | Latency |
-|---|---|---:|---:|---:|---:|
-| B0 | AnyFlow image + original prompt | 0.7600 | n/a | 0.0179 | 4.42 s |
-| B1 | prompt rewrite prototype | 0.7511 | n/a | 0.0363 | 4.26 s |
-| B2 | Fusion tokens without audio/reference | 0.7596 | 1.0000 | -0.0012 | 4.28 s |
-| B3 | full Fusion + audio + reference | 0.7570 | 0.9813 | 0.0046 | 4.31 s |
-
-The completion check passed for all 40 pairs, four variants, one seed, required metrics,
-and eight showcase cases. B0 remained the strongest VBench baseline. B2 preserved quality
-within 0.0004, while audio/reference conditioning in B3 did not improve retrieval, audio
-control, or aggregate video quality. The release therefore claims a reproducible real
-condition path and an honest negative result, not a generation-quality gain.
+B0 remains the strongest aggregate VBench baseline. B2 preserves quality within
+`0.0004`; adding audio and reference tokens in B3 does not improve the reported metrics.
 
 ## Limitations
 
-- The base AnyFlow model is restricted to non-commercial use under NVIDIA NSCLv1.
-- ImageBind is also governed by non-commercial research terms.
-- Audio control is indirect through condition tokens; it does not synthesize an output soundtrack.
-- Retrieval quality depends on the licensed local reference gallery.
-- On this checkpoint, adding audio and reference tokens slightly reduced aggregate VBench and retrieval MRR.
-- The project is evaluated as an internship portfolio system, not a paper-scale benchmark.
+- AnyFlow is restricted to non-commercial use under NVIDIA NSCLv1.
+- ImageBind is governed by non-commercial research terms.
+- Audio conditions influence video tokens but do not create an output soundtrack.
+- Retrieval requires a separately licensed reference gallery.
+- Results are specific to the released checkpoint and evaluation subset.
 
-## Citation
+## References
 
-Please cite the upstream AnyFlow, ImageBind, InternVideo2, MSR-VTT, and VBench projects.
-See `THIRD_PARTY_NOTICES.md` and `docs/third_party_commits.md` in the source repository.
+Please cite AnyFlow, ImageBind, InternVideo2, MSR-VTT, and VBench as applicable. Source
+versions and license notes are recorded in `THIRD_PARTY_NOTICES.md` and
+`docs/third_party_commits.md` in the GitHub repository.
