@@ -13,18 +13,70 @@ VAE, and base transformer remain frozen.
 ## Architecture
 
 ```mermaid
-flowchart LR
-  A[Text / Image / Audio] --> B[ImageBind]
-  V[Reference videos] --> C[InternVideo2 index]
-  B --> D[HierarchicalConditionFusion]
-  D --> E[Cross-modal retrieval]
-  C --> E
-  E --> F[ReferenceAdapter]
-  D --> G[Condition projector]
-  F --> G
-  G --> H[7 tokens in UMT5 space]
-  H --> I[AnyFlow cross-attention + LoRA]
-  I --> J[Generated video]
+%%{init: {"theme": "base", "themeVariables": {"background": "#ffffff", "primaryTextColor": "#172033", "lineColor": "#64748b", "fontFamily": "Inter, ui-sans-serif, system-ui"}, "flowchart": {"curve": "basis", "nodeSpacing": 40, "rankSpacing": 54}}}%%
+flowchart TB
+  subgraph INPUTS["1  ·  MULTIMODAL INPUTS"]
+    direction LR
+    TXT["Text"]
+    IMG["Image"]
+    AUD["Audio"]
+    REF["Reference video gallery"]
+  end
+
+  subgraph BACKBONES["2  ·  FROZEN REPRESENTATIONS"]
+    direction LR
+    IB["ImageBind<br/>text · image · audio"]
+    IV["InternVideo2<br/>video embeddings"]
+    IDX["Train-only vector index"]
+    IV --> IDX
+  end
+
+  subgraph CONDITIONING["3  ·  MUGEN CONDITIONING  ·  TRAINABLE"]
+    direction LR
+    FUSION["HierarchicalConditionFusion<br/><b>3 fusion tokens</b>"]
+    RETRIEVE["Cross-modal retrieval<br/>top-k · self-excluded"]
+    ADAPTER["ReferenceAdapter<br/><b>4 reference tokens</b>"]
+    PROJECT["Type embeddings + projector<br/><b>7 × 4096D tokens</b>"]
+    FUSION --> RETRIEVE
+    RETRIEVE --> ADAPTER
+    FUSION --> PROJECT
+    ADAPTER --> PROJECT
+  end
+
+  subgraph GENERATION["4  ·  VIDEO GENERATION"]
+    direction LR
+    PROMPT["UMT5 prompt embeddings"]
+    ANYFLOW["AnyFlow 1.3B<br/>cross-attention LoRA"]
+    VIDEO["Generated video"]
+    PROMPT --> ANYFLOW --> VIDEO
+  end
+
+  TXT --> IB
+  IMG --> IB
+  AUD --> IB
+  REF --> IV
+  IB --> FUSION
+  IDX --> RETRIEVE
+  PROJECT -->|append to prompt_embeds| ANYFLOW
+
+  classDef input fill:#f8fafc,stroke:#94a3b8,color:#172033,stroke-width:1.5px;
+  classDef frozen fill:#e8f1fb,stroke:#5682b1,color:#172033,stroke-width:1.5px;
+  classDef trainable fill:#e9f7ef,stroke:#4d956c,color:#172033,stroke-width:2px;
+  classDef assembly fill:#fff4d6,stroke:#b8862f,color:#172033,stroke-width:2px;
+  classDef generator fill:#f3eeff,stroke:#7a68a6,color:#172033,stroke-width:1.5px;
+  classDef output fill:#fdecec,stroke:#b65a5a,color:#172033,stroke-width:1.5px;
+
+  class TXT,IMG,AUD,REF input;
+  class IB,IV,IDX frozen;
+  class FUSION,RETRIEVE,ADAPTER trainable;
+  class PROJECT assembly;
+  class PROMPT,ANYFLOW generator;
+  class VIDEO output;
+
+  style INPUTS fill:#ffffff,stroke:#d7dee8,stroke-width:1px
+  style BACKBONES fill:#f8fbff,stroke:#b9cee3,stroke-width:1px
+  style CONDITIONING fill:#f7fcf9,stroke:#a9d2ba,stroke-width:1.5px
+  style GENERATION fill:#fbf9ff,stroke:#c8bee1,stroke-width:1px
 ```
 
 Core components:
