@@ -1,6 +1,6 @@
 ---
 title: MUGen-VR Consistency Evaluation
-emoji: film_frames
+emoji: 🎬
 colorFrom: gray
 colorTo: green
 sdk: static
