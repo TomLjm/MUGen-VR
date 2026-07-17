@@ -144,6 +144,36 @@ def test_multimodal_conditioner_outputs_anyflow_tokens():
     assert all(bundle.modality_mask.values())
 
 
+def test_temporal_conditioner_retrieves_consistently_and_appends_time_tokens():
+    model = MultimodalConditioner(
+        dims={"text": 8, "image": 8, "audio": 4, "reference": 8},
+        hidden_dim=8,
+        generator_dim=16,
+        temporal_audio_dim=8 * 6,
+    )
+    model.eval()
+    modalities = {
+        "text": torch.randn(2, 8),
+        "image": torch.randn(2, 8),
+        "audio": torch.randn(2, 4),
+    }
+    bundle = model(
+        prompt="two samples",
+        image_condition=object(),
+        modality_embeddings=modalities,
+        temporal_audio_embeddings=torch.randn(2, 8 * 6),
+        reference_gallery=torch.randn(5, 8),
+        retrieval_modality_embeddings=modalities,
+        reference_top_k=2,
+        reference_exclude_indices=torch.tensor([0, 1]),
+    )
+
+    assert bundle.condition_tokens.shape == (2, 15, 16)
+    assert bundle.modality_mask["audio_temporal"] is True
+    assert 0 not in bundle.metadata["reference_indices"][0].tolist()
+    assert 1 not in bundle.metadata["reference_indices"][1].tolist()
+
+
 def test_split_isolation_rejects_video_leakage():
     rows = [
         {"video_id": "v1", "split": "train"},

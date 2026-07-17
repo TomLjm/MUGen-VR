@@ -29,16 +29,53 @@ def test_hf_package_is_whitelist_only(tmp_path):
     evaluation = tmp_path / "evaluation.json"
     model_card.write_text("model card", encoding="utf-8")
     evaluation.write_text("{}", encoding="utf-8")
+    license_path = tmp_path / "LICENSE"
+    license_path.write_text("MIT", encoding="utf-8")
 
     output = tmp_path / "release"
-    manifest = MODULE.package_model(checkpoint, model_card, evaluation, output)
+    manifest = MODULE.package_model(
+        checkpoint, model_card, evaluation, output, license_path=license_path
+    )
 
     assert not (output / "optimizer.pt").exists()
     assert {item["name"] for item in manifest["files"]} == {
         "README.md",
+        "LICENSE",
         "conditioner.pt",
         "evaluation.json",
         "mugen_config.json",
-        "pytorch_lora_weights.safetensors",
     }
-    assert json.loads((output / "mugen_config.json").read_text())["condition_scale"] == 0.1
+    config = json.loads((output / "mugen_config.json").read_text())
+    assert config["condition_scale"] == 0.05
+    assert config["condition_token_count"] == 15
+    assert config["temporal_audio_tokens"] == 8
+    assert config["use_lora"] is False
+
+
+def test_hf_package_can_include_legacy_lora(tmp_path):
+    checkpoint = tmp_path / "checkpoint"
+    checkpoint.mkdir()
+    (checkpoint / "conditioner.pt").write_bytes(b"conditioner")
+    (checkpoint / "pytorch_lora_weights.safetensors").write_bytes(b"lora")
+    state = {
+        "step": 1,
+        "config": {
+            "model": {"base": "upstream/base", "reference_tokens": 4, "lora": {"rank": 16}},
+            "data": {"reference_top_k": 3, "num_frames": 25, "height": 256, "width": 448, "latent_chunk_size": 2},
+        },
+        "feature_manifest": {"encoder_versions": {}, "rows": 1},
+        "metrics": {},
+    }
+    (checkpoint / "training_state.json").write_text(json.dumps(state), encoding="utf-8")
+    model_card = tmp_path / "MODEL_CARD.md"
+    evaluation = tmp_path / "evaluation.json"
+    model_card.write_text("model card", encoding="utf-8")
+    evaluation.write_text("{}", encoding="utf-8")
+
+    output = tmp_path / "release"
+    MODULE.package_model(
+        checkpoint, model_card, evaluation, output, include_lora=True
+    )
+
+    assert (output / "pytorch_lora_weights.safetensors").is_file()
+    assert json.loads((output / "mugen_config.json").read_text())["use_lora"] is True

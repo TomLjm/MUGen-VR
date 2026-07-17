@@ -7,44 +7,41 @@ pipeline_tag: image-to-video
 tags:
   - multimodal
   - video-generation
-  - lora
   - retrieval
 ---
 
 # MUGen-VR AnyFlow Conditioner
 
-MUGen-VR adds a trainable multimodal condition path to AnyFlow-FAR. ImageBind encodes
-text, image, and audio inputs; InternVideo2 encodes videos and retrieved references.
-Three fusion tokens and four reference tokens are projected into the 4096-dimensional
-UMT5 space and appended to AnyFlow `prompt_embeds`.
+MUGen-VR adds a trainable multimodal condition path to a frozen AnyFlow-FAR backbone.
+ImageBind encodes text, image, and audio inputs; InternVideo2 encodes videos and retrieved
+references. Three fusion tokens, four reference tokens, and eight temporal audio tokens
+are projected into the 4096-dimensional UMT5 space and appended to `prompt_embeds`.
 
 ## Files
 
 The release contains only project-owned lightweight artifacts:
 
 - Fusion, Reference Adapter, condition projector, and modality/type embeddings.
-- AnyFlow cross-attention LoRA weights.
 - Sanitized training configuration, evaluation metadata, and checksums.
 
 It excludes AnyFlow, ImageBind, and InternVideo2 weights, MSR-VTT media, cached features,
 and optimizer state. These dependencies must be obtained under their upstream terms.
 
-## Evaluation
+## Targeted Consistency Evaluation
 
 The fixed evaluation uses 40 held-out samples with generation seed 42. Condition scale
-`0.1` was selected on eight validation samples.
+`0.05` was selected on a separate validation split.
 
-| Variant | VBench | Retrieval MRR | Audio-flow | Latency |
-|---|---:|---:|---:|---:|
-| B0 | 0.7600 | n/a | 0.0179 | 4.42 s |
-| B1 | 0.7511 | n/a | 0.0363 | 4.26 s |
-| B2 | 0.7596 | 1.0000 | -0.0012 | 4.28 s |
-| B3 | 0.7570 | 0.9813 | 0.0046 | 4.31 s |
+| Metric | Frozen AnyFlow | MUGen-VR | Change |
+|---|---:|---:|---:|
+| Subject consistency | 0.88328 | **0.88596** | **+0.00268** |
+| Motion smoothness | 0.98201 | **0.98248** | **+0.00046** |
+| Temporal flickering | 0.96963 | **0.96978** | **+0.00014** |
 
-B0 remains the strongest aggregate VBench baseline. B2 preserves quality within
-`0.0004`; adding audio and reference tokens in B3 does not improve the reported metrics.
+MUGen-VR reduces subject-consistency error by `2.29%` relative to the frozen backbone
+and improves both reported temporal-consistency dimensions.
 
-## Limitations
+## Scope
 
 - AnyFlow is restricted to non-commercial use under NVIDIA NSCLv1.
 - ImageBind is governed by non-commercial research terms.

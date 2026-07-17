@@ -1,5 +1,5 @@
 ---
-title: MUGen-VR
+title: MUGen-VR Consistency Evaluation
 emoji: film_frames
 colorFrom: gray
 colorTo: green
@@ -8,6 +8,6 @@ pinned: false
 license: other
 ---
 
-Static B0-B3 evaluation showcase for MUGen-VR. AnyFlow and dataset licenses remain
+Static targeted consistency evaluation for MUGen-VR. AnyFlow and dataset licenses remain
 governed by their upstream terms; this Space does not host inference weights.
 Generated videos are provided for non-commercial research demonstration only.

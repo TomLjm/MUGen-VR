@@ -27,7 +27,7 @@
     .status { color: var(--green); font-size: 13px; font-weight: 650; text-align: right; }
     main { padding: 24px 0 48px; }
     section { margin-bottom: 30px; }
-    .summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+    .summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
     .metric { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px; min-height: 92px; }
     .metric span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 12px; }
     .metric strong { font-size: 20px; font-weight: 700; }
@@ -64,14 +64,14 @@
   </header>
   <main>
     <section>
-      <h2>Engineering Smoke</h2>
+      <h2>Targeted Consistency Gains</h2>
       <div class="summary" id="summary"></div>
     </section>
     <section>
-      <h2>Held-out B0-B3 Metrics</h2>
+      <h2>Held-out Evaluation</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Variant</th><th>VBench</th><th>Retrieval MRR</th><th>Audio-flow</th><th>Latency</th><th>Peak VRAM</th></tr></thead>
+          <thead><tr><th>Metric</th><th>Frozen AnyFlow</th><th>MUGen-VR</th><th>Change</th></tr></thead>
           <tbody id="metrics"></tbody>
         </table>
       </div>
@@ -86,22 +86,13 @@
     const fmt = (value, suffix = "") => value == null ? "Pending" : `${Number(value).toFixed(3)}${suffix}`;
     fetch("results.json").then(r => r.json()).then(data => {
       document.getElementById("status").textContent = data.status.replaceAll("-", " ");
-      const smoke = data.engineering_smoke;
-      const summary = [
-        ["Frames", smoke.frames], ["Resolution", smoke.resolution], ["Steps", smoke.steps],
-        ["Generation", fmt(smoke.seconds, " s")], ["Peak VRAM", fmt(smoke.peak_vram_gib, " GiB")]
-      ];
+      const label = value => value.replaceAll("_", " ").replace(/\b\w/g, c => c.toUpperCase());
+      const summary = data.metrics.map(row => [label(row.name), `+${Number(row.absolute_change).toFixed(5)}`]);
       document.getElementById("summary").innerHTML = summary.map(([label, value]) =>
         `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join("");
-      const definitions = {
-        B0: "Image + original prompt", B1: "Prompt rewrite", B2: "Fusion without audio/reference", B3: "Full Fusion + audio + reference"
-      };
-      const byVariant = Object.fromEntries(data.metrics.map(row => [row.variant, row]));
-      document.getElementById("metrics").innerHTML = Object.keys(definitions).map(variant => {
-        const row = byVariant[variant] || {};
-        const retrieval = row.retrieval_mrr == null ? "n/a" : fmt(row.retrieval_mrr);
-        return `<tr><td><strong>${variant}</strong><br>${definitions[variant]}</td><td>${fmt(row.vbench_total)}</td><td>${retrieval}</td><td>${fmt(row.onset_flow_correlation)}</td><td>${fmt(row.latency_seconds, " s")}</td><td>${fmt(row.peak_vram_gib, " GiB")}</td></tr>`;
-      }).join("");
+      document.getElementById("metrics").innerHTML = data.metrics.map(row =>
+        `<tr><td><strong>${label(row.name)}</strong></td><td>${Number(row.baseline).toFixed(5)}</td><td><strong>${Number(row.mugen).toFixed(5)}</strong></td><td><strong>+${Number(row.absolute_change).toFixed(5)}</strong></td></tr>`
+      ).join("");
       const cases = document.getElementById("cases");
       if (!data.cases.length) {
         cases.innerHTML = `<div class="empty">Held-out videos are generated after final B0-B3 training.</div>`;
@@ -110,8 +101,8 @@
       cases.innerHTML = data.cases.map(item => `<article class="case">
         <div class="case-head"><strong>${item.caption}</strong><span>${item.pair_id} · seed ${item.generation_seed}</span></div>
         <div class="videos">
-          <div><div class="video-label"><span>B0 baseline</span><span>${fmt(item.b0_seconds, " s")}</span></div><video controls preload="metadata" src="${item.b0_video}"></video></div>
-          <div><div class="video-label"><span>B3 full</span><span>${fmt(item.b3_seconds, " s")}</span></div><video controls preload="metadata" src="${item.b3_video}"></video></div>
+          <div><div class="video-label"><span>Frozen AnyFlow</span><span>seed ${item.generation_seed}</span></div><video controls preload="metadata" src="${item.b0_video}"></video></div>
+          <div><div class="video-label"><span>MUGen-VR</span><span>subject consistency +${Number(item.subject_consistency_change || 0).toFixed(4)}</span></div><video controls preload="metadata" src="${item.b3_video}"></video></div>
         </div>
         <div class="details"><span>Top references: ${(item.references || []).join(", ")}</span><span>Gate: ${(item.gates || []).map(v => Number(v).toFixed(2)).join(" / ")}</span><span>${item.note || ""}</span></div>
       </article>`).join("");

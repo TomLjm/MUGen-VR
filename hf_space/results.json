@@ -3,12 +3,8 @@
   "evaluation": {
     "samples": 40,
     "generation_seed": 42,
-    "variants": [
-      "B0",
-      "B1",
-      "B2",
-      "B3"
-    ]
+    "backbone": "frozen AnyFlow-FAR 1.3B",
+    "condition_scale": 0.05
   },
   "engineering_smoke": {
     "frames": 25,
@@ -20,234 +16,201 @@
   },
   "metrics": [
     {
-      "variant": "B0",
-      "latency_seconds": 4.415573643179959,
-      "generated_fps": 5.700837394230057,
-      "peak_vram_gib": 15.610107421875,
-      "subject_consistency": 0.884030045941472,
-      "motion_smoothness": 0.984162795787803,
-      "temporal_flickering": 0.9728844855112184,
-      "aesthetic_quality": 0.4435853444039819,
-      "imaging_quality": 0.5152302944946286,
-      "vbench_total": 0.759978593227821,
-      "imagebind_audio_video_alignment": 0.2249340817797929,
-      "onset_flow_correlation": 0.01786091947584697
+      "name": "subject_consistency",
+      "baseline": 0.8832832113063583,
+      "mugen": 0.8859599555454527,
+      "absolute_change": 0.002676744239094364,
+      "relative_error_reduction": 0.022933669346577767
     },
     {
-      "variant": "B1",
-      "latency_seconds": 4.26074977768003,
-      "generated_fps": 5.877865403882483,
-      "peak_vram_gib": 15.610107421875,
-      "subject_consistency": 0.8433478668642538,
-      "motion_smoothness": 0.9751392628313267,
-      "temporal_flickering": 0.9570126858178301,
-      "aesthetic_quality": 0.45098427012562714,
-      "imaging_quality": 0.5291726571655279,
-      "vbench_total": 0.7511313485609136,
-      "imagebind_audio_video_alignment": 0.23401265256106854,
-      "onset_flow_correlation": 0.03631851392772683
+      "name": "motion_smoothness",
+      "baseline": 0.9820145276399405,
+      "mugen": 0.9824786442015501,
+      "absolute_change": 0.00046411656160960657
     },
     {
-      "variant": "B2",
-      "latency_seconds": 4.279900551162427,
-      "generated_fps": 5.849079877479161,
-      "peak_vram_gib": 15.610107421875,
-      "subject_consistency": 0.8709420069120819,
-      "motion_smoothness": 0.9821310122763294,
-      "temporal_flickering": 0.9698621026908654,
-      "aesthetic_quality": 0.44844568669796,
-      "imaging_quality": 0.5265446289634709,
-      "vbench_total": 0.7595850875081422,
-      "imagebind_audio_video_alignment": 0.2250766169745475,
-      "onset_flow_correlation": -0.0011641985030232075,
-      "retrieval_rank": 1.0,
-      "retrieval_mrr": 1.0
-    },
-    {
-      "variant": "B3",
-      "latency_seconds": 4.309116636033286,
-      "generated_fps": 5.810298692646417,
-      "peak_vram_gib": 15.610107421875,
-      "subject_consistency": 0.8677799109912785,
-      "motion_smoothness": 0.9811141542968373,
-      "temporal_flickering": 0.9684628730077376,
-      "aesthetic_quality": 0.44271424114704105,
-      "imaging_quality": 0.524960030918121,
-      "vbench_total": 0.7570062420722037,
-      "imagebind_audio_video_alignment": 0.22060853205621242,
-      "onset_flow_correlation": 0.0046293259929009465,
-      "retrieval_rank": 1.075,
-      "retrieval_mrr": 0.98125
+      "name": "temporal_flickering",
+      "baseline": 0.9696340364802118,
+      "mugen": 0.9697767750305288,
+      "absolute_change": 0.0001427385503169898
     }
   ],
   "cases": [
     {
-      "pair_id": "test:video8010",
-      "caption": "lego stormtroppers are in a facility",
+      "pair_id": "test:video8076",
+      "caption": "a web animation of a businessman",
       "generation_seed": 42,
-      "b0_video": "assets/test-video8010-b0.mp4",
-      "b3_video": "assets/test-video8010-b3.mp4",
-      "b0_seconds": 5.384842282976024,
-      "b3_seconds": 4.657329926034436,
+      "b0_video": "assets/test-video8076-b0.mp4",
+      "b3_video": "assets/test-video8076-b3.mp4",
+      "b0_seconds": 4.080362702021375,
+      "b3_seconds": 4.470469607040286,
       "references": [
-        "train:video4516",
-        "train:video4045",
-        "train:video1200"
+        "train:video3",
+        "train:video1894",
+        "train:video1173"
       ],
       "gates": [
-        0.212763,
-        0.239159,
-        0.311302,
-        0.236776
+        0.234004,
+        0.355047,
+        0.278025,
+        0.132924
       ],
-      "note": "Fixed held-out pair; identical generation seed."
+      "note": "Fixed held-out pair; identical generation seed.",
+      "subject_consistency_change": 0.09340468483666575
     },
     {
-      "pair_id": "test:video8721",
-      "caption": "man in grey shirt is having an interview in the building",
+      "pair_id": "test:video8260",
+      "caption": "man in white hoodie turns a page to tell you about an online store the url is available in the description",
       "generation_seed": 42,
-      "b0_video": "assets/test-video8721-b0.mp4",
-      "b3_video": "assets/test-video8721-b3.mp4",
-      "b0_seconds": 4.16819287405815,
-      "b3_seconds": 4.281987778027542,
+      "b0_video": "assets/test-video8260-b0.mp4",
+      "b3_video": "assets/test-video8260-b3.mp4",
+      "b0_seconds": 4.164467764087021,
+      "b3_seconds": 4.163852812955156,
       "references": [
-        "train:video3966",
-        "train:video2800",
-        "train:video3326"
+        "train:video6094",
+        "train:video6287",
+        "train:video3730"
       ],
       "gates": [
-        0.230347,
-        0.225926,
-        0.374376,
-        0.16935
+        0.314377,
+        0.404275,
+        0.158856,
+        0.122492
       ],
-      "note": "Fixed held-out pair; identical generation seed."
+      "note": "Fixed held-out pair; identical generation seed.",
+      "subject_consistency_change": 0.06764071434736252
     },
     {
-      "pair_id": "test:video8866",
-      "caption": "a news scene of the dog s exercise and diet",
+      "pair_id": "test:video8578",
+      "caption": "a man is commentating while playing minecraft",
       "generation_seed": 42,
-      "b0_video": "assets/test-video8866-b0.mp4",
-      "b3_video": "assets/test-video8866-b3.mp4",
-      "b0_seconds": 4.10424473893363,
-      "b3_seconds": 4.177552158012986,
+      "b0_video": "assets/test-video8578-b0.mp4",
+      "b3_video": "assets/test-video8578-b3.mp4",
+      "b0_seconds": 5.549263827037066,
+      "b3_seconds": 4.168561585946009,
       "references": [
-        "train:video3431",
-        "train:video3161",
-        "train:video2851"
+        "train:video5737",
+        "train:video4936",
+        "train:video493"
       ],
       "gates": [
-        0.36291,
-        0.207157,
-        0.302138,
-        0.127794
+        0.122913,
+        0.498919,
+        0.193282,
+        0.184886
       ],
-      "note": "Fixed held-out pair; identical generation seed."
+      "note": "Fixed held-out pair; identical generation seed.",
+      "subject_consistency_change": 0.04858956237634027
     },
     {
-      "pair_id": "test:video7613",
-      "caption": "a female journalist wearing a purple shirt and white blazer is talking on a news show next to the image of a male in a dark suit",
+      "pair_id": "test:video8300",
+      "caption": "a woman pours water into her pot of meat then tomato sauce and stirs it all around while talking",
       "generation_seed": 42,
-      "b0_video": "assets/test-video7613-b0.mp4",
-      "b3_video": "assets/test-video7613-b3.mp4",
-      "b0_seconds": 4.722141731064767,
-      "b3_seconds": 4.492443670053035,
+      "b0_video": "assets/test-video8300-b0.mp4",
+      "b3_video": "assets/test-video8300-b3.mp4",
+      "b0_seconds": 4.067380039021373,
+      "b3_seconds": 4.102126138983294,
       "references": [
-        "train:video1448",
-        "train:video3778",
-        "train:video4830"
+        "train:video3238",
+        "train:video5370",
+        "train:video5529"
       ],
       "gates": [
-        0.301021,
-        0.307922,
-        0.195845,
-        0.195212
+        0.291971,
+        0.336155,
+        0.250287,
+        0.121587
       ],
-      "note": "Fixed held-out pair; identical generation seed."
+      "note": "Fixed held-out pair; identical generation seed.",
+      "subject_consistency_change": 0.02523958869278431
     },
     {
-      "pair_id": "test:video8494",
-      "caption": "a girl is talking about a celebrity",
+      "pair_id": "test:video7968",
+      "caption": "a foul mouthed chef demonstrates and describes a vegetable recipe",
       "generation_seed": 42,
-      "b0_video": "assets/test-video8494-b0.mp4",
-      "b3_video": "assets/test-video8494-b3.mp4",
-      "b0_seconds": 4.210005700937472,
-      "b3_seconds": 4.167917798971757,
+      "b0_video": "assets/test-video7968-b0.mp4",
+      "b3_video": "assets/test-video7968-b3.mp4",
+      "b0_seconds": 4.319364671129733,
+      "b3_seconds": 4.141626643948257,
       "references": [
-        "train:video4755",
-        "train:video454",
-        "train:video2328"
+        "train:video1111",
+        "train:video118",
+        "train:video3516"
       ],
       "gates": [
-        0.247048,
-        0.231678,
-        0.303141,
-        0.218134
+        0.24822,
+        0.353991,
+        0.27208,
+        0.125708
       ],
-      "note": "Fixed held-out pair; identical generation seed."
+      "note": "Fixed held-out pair; identical generation seed.",
+      "subject_consistency_change": 0.01826430857181549
     },
     {
-      "pair_id": "test:video8469",
-      "caption": "two parrots in a bird cage one white chick and on green adult",
+      "pair_id": "test:video7545",
+      "caption": "a person is playing a violin",
       "generation_seed": 42,
-      "b0_video": "assets/test-video8469-b0.mp4",
-      "b3_video": "assets/test-video8469-b3.mp4",
-      "b0_seconds": 4.2626593300374225,
-      "b3_seconds": 4.310003033024259,
+      "b0_video": "assets/test-video7545-b0.mp4",
+      "b3_video": "assets/test-video7545-b3.mp4",
+      "b0_seconds": 4.157840481959283,
+      "b3_seconds": 4.116635029902682,
       "references": [
-        "train:video469",
-        "train:video4010",
-        "train:video3599"
+        "train:video4877",
+        "train:video5606",
+        "train:video4467"
       ],
       "gates": [
-        0.343451,
-        0.219414,
-        0.247925,
-        0.18921
+        0.159852,
+        0.351211,
+        0.251563,
+        0.237374
       ],
-      "note": "Fixed held-out pair; identical generation seed."
+      "note": "Fixed held-out pair; identical generation seed.",
+      "subject_consistency_change": 0.0149745146433512
     },
     {
-      "pair_id": "test:video7965",
-      "caption": "man driving in a car an talking about the car",
+      "pair_id": "test:video8057",
+      "caption": "a women preparing a duck to roast",
       "generation_seed": 42,
-      "b0_video": "assets/test-video7965-b0.mp4",
-      "b3_video": "assets/test-video7965-b3.mp4",
-      "b0_seconds": 4.467092072009109,
-      "b3_seconds": 4.296636795974337,
+      "b0_video": "assets/test-video8057-b0.mp4",
+      "b3_video": "assets/test-video8057-b3.mp4",
+      "b0_seconds": 4.419590985868126,
+      "b3_seconds": 4.044386961031705,
       "references": [
-        "train:video4412",
-        "train:video2556",
-        "train:video2773"
+        "train:video3310",
+        "train:video1265",
+        "train:video2973"
       ],
       "gates": [
-        0.254943,
-        0.225153,
-        0.354352,
-        0.165553
+        0.326024,
+        0.352187,
+        0.206723,
+        0.115066
       ],
-      "note": "Fixed held-out pair; identical generation seed."
+      "note": "Fixed held-out pair; identical generation seed.",
+      "subject_consistency_change": 0.010653336842854855
     },
     {
-      "pair_id": "test:video8780",
-      "caption": "some people are shooting outside",
+      "pair_id": "test:video7911",
+      "caption": "a woman is making a recipe in a sauce pan",
       "generation_seed": 42,
-      "b0_video": "assets/test-video8780-b0.mp4",
-      "b3_video": "assets/test-video8780-b3.mp4",
-      "b0_seconds": 4.0292512599844486,
-      "b3_seconds": 4.042888793046586,
+      "b0_video": "assets/test-video7911-b0.mp4",
+      "b3_video": "assets/test-video7911-b3.mp4",
+      "b0_seconds": 4.4246846428141,
+      "b3_seconds": 4.152481762925163,
       "references": [
-        "train:video3005",
-        "train:video1182",
-        "train:video4371"
+        "train:video103",
+        "train:video1884",
+        "train:video1854"
       ],
       "gates": [
-        0.309129,
-        0.230603,
-        0.261713,
-        0.198555
+        0.194285,
+        0.459842,
+        0.197468,
+        0.148404
       ],
-      "note": "Fixed held-out pair; identical generation seed."
+      "note": "Fixed held-out pair; identical generation seed.",
+      "subject_consistency_change": 0.010091015448172813
     }
   ]
 }

@@ -32,3 +32,38 @@ def test_audio_evaluation_loads_all_generation_partitions(tmp_path):
         manifests.append(path)
 
     assert [row["sample_id"] for row in MODULE.load_rows(manifests)] == ["0", "1"]
+
+
+def test_audio_evaluation_aggregates_each_variant_independently():
+    rows = [
+        {
+            "variant": "B2",
+            "imagebind_audio_video_alignment": 0.2,
+            "onset_flow_correlation": 0.1,
+        },
+        {
+            "variant": "B3",
+            "imagebind_audio_video_alignment": 0.4,
+            "onset_flow_correlation": 0.3,
+        },
+        {
+            "variant": "B3",
+            "imagebind_audio_video_alignment": 0.6,
+            "onset_flow_correlation": 0.5,
+        },
+    ]
+
+    aggregate = MODULE.aggregate_results(rows)
+
+    assert aggregate == {
+        "B2": {
+            "count": 1,
+            "imagebind_audio_video_alignment": pytest.approx(0.2),
+            "onset_flow_correlation": pytest.approx(0.1),
+        },
+        "B3": {
+            "count": 2,
+            "imagebind_audio_video_alignment": pytest.approx(0.5),
+            "onset_flow_correlation": pytest.approx(0.4),
+        },
+    }

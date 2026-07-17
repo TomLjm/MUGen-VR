@@ -27,6 +27,11 @@ def parse_args():
     parser.add_argument("--output-dir")
     parser.add_argument("--max-steps", type=int)
     parser.add_argument("--resume-from")
+    parser.add_argument(
+        "--reset-optimizer",
+        action="store_true",
+        help="Load LoRA/conditioner weights but start a fresh optimizer and step counter.",
+    )
     return parser.parse_args()
 
 
@@ -94,6 +99,80 @@ def sample_indices(indices, batch_size, generator):
     return indices[positions].tolist()
 
 
+def sample_mismatched_indices(target_indices, pool_indices, generator):
+    pool_indices = torch.as_tensor(pool_indices, dtype=torch.long)
+    mismatched = []
+    for target in target_indices:
+        candidates = pool_indices[pool_indices != int(target)]
+        if not len(candidates):
+            raise ValueError("counterfactual conditioning requires a different source sample")
+        position = torch.randint(len(candidates), (1,), generator=generator).item()
+        mismatched.append(int(candidates[position]))
+    return mismatched
+
+
+def sample_condition_scale(minimum, maximum, generator):
+    minimum, maximum = float(minimum), float(maximum)
+    if minimum <= 0 or maximum < minimum:
+        raise ValueError("condition scale range must satisfy 0 < minimum <= maximum")
+    return minimum + (maximum - minimum) * float(torch.rand((), generator=generator))
+
+
+def normalize_condition_token_budget(tokens, scale, baseline_tokens=7):
+    if tokens.ndim != 3 or tokens.shape[1] < 1:
+        raise ValueError("condition tokens must have shape [batch, tokens, dim]")
+    budget = min(1.0, float(baseline_tokens) / tokens.shape[1])
+    return tokens * float(scale) * budget
+
+
+def restore_cuda_rng_states(states):
+    if not torch.cuda.is_available() or not states:
+        return
+    device_count = torch.cuda.device_count()
+    if len(states) < device_count:
+        raise ValueError(
+            f"checkpoint has {len(states)} CUDA RNG states for {device_count} visible devices"
+        )
+    torch.cuda.set_rng_state_all(states[:device_count])
+
+
+def load_sync_scores(paths):
+    scores = {}
+    for path in paths or []:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        for row in payload["per_sample"]:
+            scores[row["sample_id"]] = float(row["correlation"])
+    return scores
+
+
+def select_sync_indices(records, split, scores, threshold):
+    return torch.tensor(
+        [
+            index
+            for index, row in enumerate(records)
+            if row["split"] == split and scores.get(row["sample_id"], -float("inf")) >= threshold
+        ],
+        dtype=torch.long,
+    )
+
+
+def rhythm_alignment_loss(clean_prediction, temporal_audio):
+    if clean_prediction.shape[1] < 2:
+        return clean_prediction.new_zeros(())
+    motion = (clean_prediction[:, 1:] - clean_prediction[:, :-1]).abs().mean(dim=(2, 3, 4))
+    onset = temporal_audio.reshape(temporal_audio.shape[0], 8, -1)[..., -1]
+    onset = F.interpolate(onset.unsqueeze(1), size=motion.shape[1], mode="linear", align_corners=False)
+    onset = onset.squeeze(1)
+    motion = (motion - motion.mean(dim=-1, keepdim=True)) / motion.std(
+        dim=-1, keepdim=True
+    ).clamp_min(1e-5)
+    onset = (onset - onset.mean(dim=-1, keepdim=True)) / onset.std(
+        dim=-1, keepdim=True
+    ).clamp_min(1e-5)
+    correlation = (motion * onset).mean(dim=-1)
+    return (1.0 - correlation).mean()
+
+
 def load_conditioner(tensors, checkpoint_path, generator_dim, reference_tokens, device):
     dims = {name: int(tensors[name].shape[-1]) for name in ["text", "image", "audio"]}
     dims["reference"] = int(tensors["video"].shape[-1])
@@ -102,6 +181,9 @@ def load_conditioner(tensors, checkpoint_path, generator_dim, reference_tokens, 
         hidden_dim=dims["reference"],
         generator_dim=generator_dim,
         num_reference_tokens=reference_tokens,
+        temporal_audio_dim=(
+            int(tensors["audio_temporal"].shape[-1]) if "audio_temporal" in tensors else None
+        ),
     )
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     conditioner.fusion.load_state_dict(checkpoint["fusion"])
@@ -109,29 +191,69 @@ def load_conditioner(tensors, checkpoint_path, generator_dim, reference_tokens, 
     return conditioner.to(device)
 
 
+def load_migrated_conditioner_state(conditioner, checkpoint_path):
+    state = torch.load(Path(checkpoint_path) / "conditioner.pt", map_location="cpu", weights_only=True)
+    current = conditioner.state_dict()
+    if "type_embeddings" in state and state["type_embeddings"].shape != current["type_embeddings"].shape:
+        migrated = current["type_embeddings"].clone()
+        rows = min(migrated.shape[0], state["type_embeddings"].shape[0])
+        migrated[:rows] = state["type_embeddings"][:rows]
+        state["type_embeddings"] = migrated
+    incompatible = conditioner.load_state_dict(state, strict=False)
+    allowed_missing = (
+        "temporal_audio_projector.",
+        "temporal_position_embeddings",
+    )
+    unexpected_missing = [
+        name for name in incompatible.missing_keys if not name.startswith(allowed_missing)
+    ]
+    if unexpected_missing or incompatible.unexpected_keys:
+        raise RuntimeError(
+            f"conditioner migration failed; missing={unexpected_missing}, "
+            f"unexpected={incompatible.unexpected_keys}"
+        )
+    return incompatible.missing_keys
+
+
 def build_condition_tokens(
-    conditioner, tensors, records, indices, top_k, reference_gallery_indices, device
+    conditioner,
+    tensors,
+    records,
+    indices,
+    top_k,
+    reference_gallery_indices,
+    device,
+    condition_indices=None,
 ):
-    bundles = []
-    for index in indices:
-        references, scores = retrieve_reference(
-            tensors["video"], index, top_k, reference_gallery_indices
-        )
-        embeddings = {
-            name: tensors[name][index].unsqueeze(0).to(device)
-            for name in ["text", "image", "audio"]
-        }
-        bundles.append(
-            conditioner(
-                prompt=records[index]["caption"],
-                image_condition=None,
-                modality_embeddings=embeddings,
-                reference_embeddings=references.unsqueeze(0).to(device),
-                reference_scores=scores.unsqueeze(0).to(device),
-                metadata={"sample_id": records[index]["sample_id"]},
-            )
-        )
-    return torch.cat([bundle.condition_tokens for bundle in bundles], dim=0)
+    condition_indices = indices if condition_indices is None else condition_indices
+    if len(condition_indices) != len(indices):
+        raise ValueError("condition source count must match target count")
+    gallery_indices = torch.as_tensor(reference_gallery_indices, dtype=torch.long)
+    gallery_positions = {int(value): position for position, value in enumerate(gallery_indices)}
+    exclude_indices = torch.tensor(
+        [gallery_positions.get(int(index), -1) for index in condition_indices],
+        device=device,
+    )
+    embeddings = {
+        "text": tensors["text"][indices].to(device),
+        "image": tensors["image"][indices].to(device),
+        "audio": tensors["audio"][condition_indices].to(device),
+    }
+    retrieval_embeddings = {
+        name: tensors[name][condition_indices].to(device) for name in ["text", "image", "audio"]
+    }
+    bundle = conditioner(
+        prompt=records[indices[0]]["caption"],
+        image_condition=None,
+        modality_embeddings=embeddings,
+        temporal_audio_embeddings=tensors["audio_temporal"][condition_indices].to(device),
+        reference_gallery=tensors["video"][gallery_indices].to(device),
+        retrieval_modality_embeddings=retrieval_embeddings,
+        reference_top_k=top_k,
+        reference_exclude_indices=exclude_indices,
+        metadata={"sample_ids": [records[index]["sample_id"] for index in indices]},
+    )
+    return bundle.condition_tokens
 
 
 def encode_prompts(pipeline, prompts, condition_tokens, device, dtype):
@@ -174,6 +296,9 @@ def forward_loss(
     dtype,
     chunks,
     reference_gallery_indices,
+    condition_scale=1.0,
+    counterfactual=False,
+    generator=None,
 ):
     clean = encode_latents(
         pipeline,
@@ -190,26 +315,35 @@ def forward_loss(
     noisy[:, 0] = clean[:, 0]
     timestep_map = timesteps[:, None].repeat(1, clean.shape[1])
     timestep_map[:, 0] = 0
+    target_batch = list(batch)
+    condition_indices = list(batch)
+    if counterfactual:
+        if generator is None:
+            raise ValueError("counterfactual training requires a random generator")
+        mismatched = sample_mismatched_indices(batch, reference_gallery_indices, generator)
+        target_batch += list(batch)
+        condition_indices += mismatched
     condition_tokens = build_condition_tokens(
         conditioner,
         tensors,
         records,
-        batch,
+        target_batch,
         int(config.data.reference_top_k),
         reference_gallery_indices,
         device,
+        condition_indices=condition_indices,
     )
-    prompt_embeds = encode_prompts(
-        pipeline,
-        [records[index]["caption"] for index in batch],
-        condition_tokens,
-        device,
-        dtype,
+    condition_tokens = normalize_condition_token_budget(condition_tokens, condition_scale)
+    prompts = [records[index]["caption"] for index in target_batch]
+    prompt_embeds = encode_prompts(pipeline, prompts, condition_tokens, device, dtype)
+    transformer_noisy = noisy if not counterfactual else torch.cat([noisy, noisy], dim=0)
+    transformer_timestep = (
+        timestep_map if not counterfactual else torch.cat([timestep_map, timestep_map], dim=0)
     )
     prediction = pipeline.transformer(
-        hidden_states=noisy,
-        timestep=timestep_map,
-        r_timestep=timestep_map,
+        hidden_states=transformer_noisy,
+        timestep=transformer_timestep,
+        r_timestep=transformer_timestep,
         encoder_hidden_states=prompt_embeds,
         chunk_partition=chunks,
     ).sample
@@ -218,7 +352,24 @@ def forward_loss(
             f"AnyFlow output frames {prediction.shape[1]} do not match non-prefix target frames "
             f"{target.shape[1] - 1}; check chunk_partition and full_chunk_limit"
         )
-    return F.mse_loss(prediction.float(), target[:, 1:].float())
+    correct_prediction = prediction[: len(batch)]
+    correct_loss = F.mse_loss(correct_prediction.float(), target[:, 1:].float())
+    sigma = timesteps.float().div(num_train_timesteps).view(-1, 1, 1, 1, 1).to(noisy)
+    predicted_clean = torch.cat(
+        [clean[:, :1], noisy[:, 1:] - sigma * correct_prediction], dim=1
+    )
+    rhythm_weight = float(config.training.get("rhythm_weight", 0.0))
+    rhythm_loss = rhythm_alignment_loss(
+        predicted_clean.float(), tensors["audio_temporal"][batch].to(device)
+    )
+    objective = correct_loss + rhythm_weight * rhythm_loss
+    if not counterfactual:
+        return objective
+    shuffled_prediction = prediction[len(batch) :]
+    shuffled_loss = F.mse_loss(shuffled_prediction.float(), target[:, 1:].float())
+    margin = float(config.training.counterfactual_margin)
+    weight = float(config.training.counterfactual_weight)
+    return objective + weight * F.relu(margin + correct_loss - shuffled_loss)
 
 
 def save_checkpoint(
@@ -289,13 +440,27 @@ def main():
     generator = torch.Generator().manual_seed(seed)
 
     tensors, records, feature_manifest = load_feature_store(feature_store)
-    required = {"text", "image", "audio", "video"}
+    required = {"text", "image", "audio", "audio_temporal", "video"}
     if missing := required - set(tensors):
         raise ValueError(f"feature store is missing tensors: {sorted(missing)}")
-    train_indices = torch.tensor([i for i, row in enumerate(records) if row["split"] == "train"])
-    val_indices = torch.tensor([i for i, row in enumerate(records) if row["split"] == "val"])
+    sync_scores = load_sync_scores(config.data.get("sync_audits", []))
+    sync_threshold = float(config.data.get("sync_threshold", -float("inf")))
+    if sync_scores:
+        train_indices = select_sync_indices(records, "train", sync_scores, sync_threshold)
+        val_indices = select_sync_indices(records, "val", sync_scores, sync_threshold)
+    else:
+        train_indices = torch.tensor([i for i, row in enumerate(records) if row["split"] == "train"])
+        val_indices = torch.tensor([i for i, row in enumerate(records) if row["split"] == "val"])
     if len(train_indices) < 2 or len(val_indices) < 1:
         raise ValueError("LoRA training requires at least two train rows and one validation row")
+    if accelerator.is_main_process:
+        print(
+            {
+                "train_rows": len(train_indices),
+                "val_rows": len(val_indices),
+                "sync_threshold": sync_threshold if sync_scores else None,
+            }
+        )
 
     dtype = torch.bfloat16 if config.training.mixed_precision == "bf16" else torch.float16
     pipeline = AnyFlowFARPipeline.from_pretrained(config.model.base, torch_dtype=dtype)
@@ -328,13 +493,28 @@ def main():
         accelerator.device,
     )
     if args.resume_from:
-        conditioner.load_state_dict(
-            torch.load(Path(args.resume_from) / "conditioner.pt", map_location="cpu", weights_only=True)
-        )
+        load_migrated_conditioner_state(conditioner, args.resume_from)
     optimizer = torch.optim.AdamW(
-        [parameter for parameter in pipeline.transformer.parameters() if parameter.requires_grad]
-        + list(conditioner.parameters()),
-        lr=float(config.training.learning_rate),
+        [
+            {
+                "params": [
+                    parameter
+                    for parameter in pipeline.transformer.parameters()
+                    if parameter.requires_grad
+                ],
+                "lr": float(
+                    config.training.get("lora_learning_rate", config.training.learning_rate)
+                ),
+            },
+            {
+                "params": list(conditioner.parameters()),
+                "lr": float(
+                    config.training.get(
+                        "conditioner_learning_rate", config.training.learning_rate
+                    )
+                ),
+            },
+        ],
         weight_decay=float(config.training.weight_decay),
     )
     pipeline.transformer, conditioner, optimizer = accelerator.prepare(
@@ -347,14 +527,13 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     log_path = output_dir / f"train-rank-{accelerator.process_index}.jsonl"
     step = 0
-    if args.resume_from:
+    if args.resume_from and not args.reset_optimizer:
         resume_state = torch.load(
             Path(args.resume_from) / "optimizer.pt", map_location="cpu", weights_only=False
         )
         optimizer.load_state_dict(resume_state["optimizer"])
         torch.set_rng_state(resume_state["cpu_rng_state"])
-        if torch.cuda.is_available() and resume_state["cuda_rng_states"]:
-            torch.cuda.set_rng_state_all(resume_state["cuda_rng_states"])
+        restore_cuda_rng_states(resume_state["cuda_rng_states"])
         step = int(resume_state["step"])
 
     latent_frames = (int(config.data.num_frames) - 1) // pipeline.vae_scale_factor_temporal + 1
@@ -374,6 +553,13 @@ def main():
                     dtype,
                     chunks,
                     train_indices,
+                    condition_scale=sample_condition_scale(
+                        config.training.condition_scale_min,
+                        config.training.condition_scale_max,
+                        generator,
+                    ),
+                    counterfactual=True,
+                    generator=generator,
                 )
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
@@ -390,19 +576,29 @@ def main():
                     pipeline.transformer.eval()
                     conditioner.eval()
                     with torch.no_grad():
-                        val_batch = val_indices[: int(config.training.batch_size)].tolist()
-                        val_loss = forward_loss(
-                            pipeline,
-                            conditioner,
-                            tensors,
-                            records,
-                            val_batch,
-                            config,
-                            accelerator.device,
-                            dtype,
-                            chunks,
-                            train_indices,
+                        val_losses = []
+                        validation_samples = min(
+                            int(config.training.validation_samples), len(val_indices)
                         )
+                        for val_index in val_indices[:validation_samples].tolist():
+                            val_losses.append(
+                                forward_loss(
+                                    pipeline,
+                                    conditioner,
+                                    tensors,
+                                    records,
+                                    [val_index],
+                                    config,
+                                    accelerator.device,
+                                    dtype,
+                                    chunks,
+                                    train_indices,
+                                    condition_scale=float(
+                                        config.training.validation_condition_scale
+                                    ),
+                                )
+                            )
+                        val_loss = torch.stack(val_losses).mean()
                     val_loss = float(accelerator.gather(val_loss.detach()).mean())
                     event["validation_loss"] = val_loss
                     pipeline.transformer.train()

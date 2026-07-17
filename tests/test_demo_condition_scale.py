@@ -12,10 +12,11 @@ SPEC.loader.exec_module(MODULE)
 
 def test_demo_applies_validation_selected_condition_scale():
     class Bundle:
-        condition_tokens = torch.ones(1, 7, 4)
+        condition_tokens = torch.ones(1, 15, 4)
         metadata = {}
 
-    bundle = MODULE.apply_condition_scale(Bundle(), 0.1)
+    bundle = MODULE.apply_condition_scale(Bundle(), 0.05)
 
-    assert torch.allclose(bundle.condition_tokens, torch.full((1, 7, 4), 0.1))
-    assert bundle.metadata["condition_scale"] == 0.1
+    assert torch.allclose(bundle.condition_tokens, torch.full((1, 15, 4), 0.05 * 7 / 15))
+    assert bundle.metadata["condition_scale"] == 0.05
+    assert bundle.metadata["effective_condition_scale"] == 0.05 * 7 / 15

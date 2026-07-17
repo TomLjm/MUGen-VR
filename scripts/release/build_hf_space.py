@@ -11,9 +11,12 @@ from pathlib import Path
 import numpy as np
 
 
-def load_jsonl(path):
-    with Path(path).open("r", encoding="utf-8") as handle:
-        return [json.loads(line) for line in handle if line.strip()]
+def load_jsonl(paths):
+    rows = []
+    for path in paths:
+        with Path(path).open("r", encoding="utf-8") as handle:
+            rows.extend(json.loads(line) for line in handle if line.strip())
+    return rows
 
 
 def summarize_gates(gates):
@@ -30,6 +33,8 @@ def build_space(ablation_rows, report, cases, output_dir, existing_results):
     output_dir = Path(output_dir)
     assets = output_dir / "assets"
     assets.mkdir(parents=True, exist_ok=True)
+    for stale_video in assets.glob("*.mp4"):
+        stale_video.unlink()
     by_key = {(str(row["pair_id"]), row["variant"]): row for row in ablation_rows}
     built_cases = []
     for case in cases:
@@ -55,16 +60,14 @@ def build_space(ablation_rows, report, cases, output_dir, existing_results):
                 "references": [item["sample_id"] for item in b3.get("references", [])],
                 "gates": summarize_gates(b3.get("gates")),
                 "note": "Fixed held-out pair; identical generation seed.",
+                "subject_consistency_change": case.get("subject_consistency_change"),
             }
         )
-    metrics = [
-        {"variant": variant, **report["summary"][variant]["means"]}
-        for variant in ("B0", "B1", "B2", "B3")
-    ]
     payload = {
         **existing_results,
         "status": "held-out-evaluation-complete",
-        "metrics": metrics,
+        "evaluation": report["protocol"],
+        "metrics": report["metrics"],
         "cases": built_cases,
     }
     (output_dir / "results.json").write_text(
@@ -75,7 +78,7 @@ def build_space(ablation_rows, report, cases, output_dir, existing_results):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Build static MUGen Hugging Face Space")
-    parser.add_argument("--ablation-input", required=True)
+    parser.add_argument("--ablation-input", nargs="+", required=True)
     parser.add_argument("--final-report", required=True)
     parser.add_argument("--case-manifest", required=True)
     parser.add_argument("--output-dir", default="hf_space")
@@ -88,7 +91,7 @@ def main():
     payload = build_space(
         load_jsonl(args.ablation_input),
         json.loads(Path(args.final_report).read_text(encoding="utf-8")),
-        load_jsonl(args.case_manifest),
+        load_jsonl([args.case_manifest]),
         output_dir,
         json.loads((output_dir / "results.json").read_text(encoding="utf-8")),
     )

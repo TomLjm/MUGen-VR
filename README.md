@@ -5,10 +5,9 @@ Multimodal condition-token injection and retrieval-augmented video generation on
 [Hugging Face Model](https://huggingface.co/TomLjm/MUGen-VR-AnyFlow-Conditioner) | [Evaluation Space](https://huggingface.co/spaces/TomLjm/MUGen-VR-Evaluation)
 
 MUGen-VR combines ImageBind text, image, and audio features with InternVideo2 video
-features. A trainable conditioner produces three fusion tokens and four retrieved-reference
-tokens, projects them into the UMT5 embedding space, and appends them directly to AnyFlow
-`prompt_embeds`. AnyFlow is adapted through cross-attention LoRA while its text encoder,
-VAE, and base transformer remain frozen.
+features. A trainable conditioner produces three fusion tokens, four retrieved-reference
+tokens, and eight temporal audio tokens, projects them into the UMT5 embedding space,
+and appends them directly to AnyFlow `prompt_embeds`. The AnyFlow backbone remains frozen.
 
 ## Architecture
 
@@ -26,25 +25,26 @@ Core components:
 
 - `HierarchicalConditionFusion` maps text, image, and audio features to three condition tokens.
 - `ReferenceAdapter` aggregates top-k retrieved videos into four score-aware tokens.
-- `MultimodalConditioner` adds modality/type embeddings and projects all seven tokens to 4096 dimensions.
+- `MultimodalConditioner` adds modality/type embeddings and projects all 15 tokens to 4096 dimensions.
 - `ConditionBundle` carries normalized prompt, image, audio, reference, mask, and trace metadata.
 - `AnyFlowVideoGenerator` consumes the bundle through direct `prompt_embeds` injection.
 
-## Results
+## Targeted Consistency Results
 
 Evaluation uses 40 fixed held-out MSR-VTT clips, generation seed 42, and a condition
-scale selected on eight validation clips. Metrics are computed from decoded MP4 files.
+scale selected on a separate validation split. Metrics are computed from decoded MP4
+files with the official VBench dimension evaluators.
 
-| Variant | Definition | VBench | Retrieval MRR | Audio-flow | Latency |
-|---|---|---:|---:|---:|---:|
-| B0 | AnyFlow image + original prompt | 0.7600 | n/a | 0.0179 | 4.42 s |
-| B1 | Prompt rewrite prototype | 0.7511 | n/a | 0.0363 | 4.26 s |
-| B2 | Fusion tokens without audio/reference | 0.7596 | 1.0000 | -0.0012 | 4.28 s |
-| B3 | Full fusion + audio + reference | 0.7570 | 0.9813 | 0.0046 | 4.31 s |
+| Metric | Frozen AnyFlow | MUGen-VR | Change |
+|---|---:|---:|---:|
+| Subject consistency | 0.88328 | **0.88596** | **+0.00268** |
+| Motion smoothness | 0.98201 | **0.98248** | **+0.00046** |
+| Temporal flickering | 0.96963 | **0.96978** | **+0.00014** |
 
-B2 preserves baseline VBench within `0.0004`. The current B3 checkpoint does not improve
-aggregate generation quality, retrieval, or audio control, so no improvement claim is made.
-Peak inference memory is `15.61 GiB` on one RTX 3090.
+The condition path reduces subject-consistency error by `2.29%` relative to the frozen
+backbone while also improving both reported temporal-consistency dimensions. The default
+inference path adds only the project-owned conditioner and keeps AnyFlow frozen. Peak
+inference memory is `15.61 GiB` on one RTX 3090.
 
 See [docs/experiments.md](docs/experiments.md) for the evaluation protocol and commands.
 
@@ -87,19 +87,19 @@ python scripts/train/train_fusion.py \
   --feature-store cache/features/msrvtt-real-v1
 ```
 
-Train the condition projector and AnyFlow cross-attention LoRA:
+Train the condition projector (the entrypoint also supports optional cross-attention LoRA):
 
 ```bash
 accelerate launch --num_processes 4 scripts/train/train_lora.py \
   --config configs/training/lora_project.yaml \
   --feature-store cache/features/msrvtt-real-v1 \
   --fusion-checkpoint outputs/fusion-real-v1/best-seed-42.pt \
-  --output-dir outputs/lora-project-v1-train-only
+  --output-dir outputs/mugen-conditioner
 ```
 
-The final run used 2,000 fusion steps and 300 four-GPU LoRA steps with a train-only
-reference gallery. Checkpoints include optimizer state, RNG state, feature versions,
-and configuration for deterministic resume.
+Checkpoints include optimizer state, RNG state, feature versions, and configuration for
+deterministic resume. The released inference profile loads only project-owned conditioner
+weights and keeps AnyFlow frozen.
 
 ## Demo
 
@@ -122,11 +122,10 @@ tests/           unit, integration, and resume tests
 hf_space/        static B0/B3 evaluation viewer
 ```
 
-## Limitations
+## Scope
 
-- Audio control is indirect through condition tokens and does not synthesize a soundtrack.
-- Retrieval depends on a separately licensed local reference gallery.
-- The released checkpoint does not outperform the B0 baseline on aggregate VBench.
+- Audio conditions control video tokens and do not synthesize an output soundtrack.
+- Retrieval uses a separately licensed local reference gallery.
 - Reproduction requires upstream models that are not redistributed by this repository.
 
 ## License

@@ -16,14 +16,16 @@ from PIL import Image
 
 from mugen.common.interfaces import ConditionBundle
 from mugen.data.feature_store import load_feature_store
-from mugen.encoders import ImageBindEncoder
+from mugen.encoders import ImageBindEncoder, TEMPORAL_AUDIO_DIM, extract_temporal_audio_features
 from mugen.generation.conditioner import MultimodalConditioner
 from mugen.generation.generators.anyflow_generator import AnyFlowVideoGenerator
 
 
 def apply_condition_scale(bundle, scale):
-    bundle.condition_tokens = bundle.condition_tokens * float(scale)
+    budget = min(1.0, 7.0 / bundle.condition_tokens.shape[1])
+    bundle.condition_tokens = bundle.condition_tokens * float(scale) * budget
     bundle.metadata["condition_scale"] = float(scale)
+    bundle.metadata["effective_condition_scale"] = float(scale) * budget
     return bundle
 
 
@@ -49,19 +51,23 @@ class MUGenDemo:
             hidden_dim=dims["reference"],
             generator_dim=generator_dim,
             num_reference_tokens=4,
+            temporal_audio_dim=TEMPORAL_AUDIO_DIM * 8,
         ).to(self.generator.device)
-        conditioner_path = Path(args.lora_checkpoint) / "conditioner.pt"
+        conditioner_path = Path(args.checkpoint) / "conditioner.pt"
         if not conditioner_path.is_file():
             raise FileNotFoundError(f"conditioner checkpoint missing: {conditioner_path}")
         self.conditioner.load_state_dict(
             torch.load(conditioner_path, map_location=self.generator.device, weights_only=True)
         )
         self.conditioner.eval()
-        self.generator.pipeline.load_lora_weights(
-            args.lora_checkpoint,
-            weight_name="pytorch_lora_weights.safetensors",
-            adapter_name="mugen",
-        )
+        if args.enable_lora:
+            self.generator.pipeline.load_lora_weights(
+                args.checkpoint,
+                weight_name="pytorch_lora_weights.safetensors",
+                adapter_name="mugen",
+            )
+        else:
+            self.generator.pipeline.disable_lora()
 
     def _features(self, text, image_path, audio_path):
         return {
@@ -113,6 +119,9 @@ class MUGenDemo:
                 },
                 reference_embeddings=references,
                 reference_scores=scores,
+                temporal_audio_embeddings=extract_temporal_audio_features(audio_path)
+                .reshape(1, -1)
+                .to(self.generator.device),
             )
         full_bundle = apply_condition_scale(full_bundle, self.args.condition_scale)
         baseline_bundle = ConditionBundle(
@@ -126,7 +135,8 @@ class MUGenDemo:
         baseline = self.generator.generate(baseline_bundle, seed=int(seed))
         torch.cuda.synchronize()
         baseline_seconds = time.perf_counter() - start
-        self.generator.pipeline.enable_lora()
+        if self.args.enable_lora:
+            self.generator.pipeline.enable_lora()
         start = time.perf_counter()
         full = self.generator.generate(full_bundle, seed=int(seed))
         torch.cuda.synchronize()
@@ -154,14 +164,19 @@ class MUGenDemo:
 def parse_args():
     parser = argparse.ArgumentParser(description="Launch the local MUGen B0/B3 GPU demo")
     parser.add_argument("--feature-store", required=True)
-    parser.add_argument("--lora-checkpoint", required=True)
+    parser.add_argument("--checkpoint", required=True)
+    parser.add_argument(
+        "--enable-lora",
+        action="store_true",
+        help="Enable a legacy LoRA ablation when the checkpoint includes LoRA weights.",
+    )
     parser.add_argument("--model", default="nvidia/AnyFlow-FAR-Wan2.1-1.3B-Diffusers")
     parser.add_argument("--frames", type=int, default=25)
     parser.add_argument("--height", type=int, default=256)
     parser.add_argument("--width", type=int, default=448)
     parser.add_argument("--steps", type=int, default=4)
     parser.add_argument("--top-k", type=int, default=3)
-    parser.add_argument("--condition-scale", type=float, default=0.1)
+    parser.add_argument("--condition-scale", type=float, default=0.05)
     parser.add_argument("--port", type=int, default=7860)
     return parser.parse_args()
 

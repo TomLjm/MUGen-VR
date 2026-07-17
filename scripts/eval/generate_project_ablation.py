@@ -21,6 +21,29 @@ from mugen.generation.generators.anyflow_generator import AnyFlowVideoGenerator
 
 
 VARIANTS = ("B0", "B1", "B2", "B3")
+TOKEN_GROUPS = ("full", "no-reference", "no-temporal")
+
+
+def variant_uses_lora(variant, enable_token_lora=False):
+    if variant not in VARIANTS:
+        raise ValueError(f"unknown ablation variant: {variant}")
+    return variant in {"B2", "B3"} and enable_token_lora
+
+
+def select_condition_token_groups(bundles, selection):
+    if selection not in TOKEN_GROUPS:
+        raise ValueError(f"unknown condition token selection: {selection}")
+    if selection == "full":
+        return bundles
+    tokens = bundles["B3"].condition_tokens
+    if tokens.shape[1] != 15:
+        raise ValueError(f"B3 token-group diagnostics require 15 tokens, got {tokens.shape[1]}")
+    if selection == "no-reference":
+        bundles["B3"].condition_tokens = torch.cat([tokens[:, :3], tokens[:, 7:]], dim=1)
+    else:
+        bundles["B3"].condition_tokens = tokens[:, :7]
+    bundles["B3"].metadata["condition_token_groups"] = selection
+    return bundles
 
 
 def rewrite_prompt(caption, references):
@@ -51,9 +74,18 @@ def gather_reference_embeddings(gallery, indices):
 
 def apply_condition_scale(bundles, scale):
     for variant in ("B2", "B3"):
-        bundles[variant].condition_tokens = bundles[variant].condition_tokens * float(scale)
+        tokens = bundles[variant].condition_tokens
+        budget = min(1.0, 7.0 / tokens.shape[1])
+        bundles[variant].condition_tokens = tokens * float(scale) * budget
         bundles[variant].metadata["condition_scale"] = float(scale)
+        bundles[variant].metadata["effective_condition_scale"] = float(scale) * budget
     return bundles
+
+
+def shifted_condition_row(rows, index, offset):
+    if not rows:
+        raise ValueError("cannot shift conditions for an empty manifest")
+    return rows[(index + int(offset)) % len(rows)]
 
 
 class AblationGenerator:
@@ -75,6 +107,11 @@ class AblationGenerator:
             hidden_dim=dims["reference"],
             generator_dim=int(self.generator.pipeline.text_encoder.config.d_model),
             num_reference_tokens=4,
+            temporal_audio_dim=(
+                int(self.tensors["audio_temporal"].shape[-1])
+                if "audio_temporal" in self.tensors
+                else None
+            ),
         ).to(self.generator.device)
         checkpoint = Path(args.lora_checkpoint)
         self.conditioner.load_state_dict(
@@ -87,43 +124,49 @@ class AblationGenerator:
             adapter_name="mugen",
         )
 
-    def conditions(self, row):
+    def conditions(self, row, condition_row=None):
+        condition_row = condition_row or row
         index = self.by_sample_id.get(row["sample_id"])
         if index is None:
             raise KeyError(f"evaluation sample is absent from feature store: {row['sample_id']}")
+        condition_index = self.by_sample_id.get(condition_row["sample_id"])
+        if condition_index is None:
+            raise KeyError(
+                f"condition source is absent from feature store: {condition_row['sample_id']}"
+            )
         device = self.generator.device
         embeddings = {
             name: self.tensors[name][index].unsqueeze(0).to(device)
             for name in ["text", "image", "audio"]
         }
-        with torch.no_grad():
-            initial = self.conditioner.fusion(
-                {name: (value, None) for name, value in embeddings.items()}
-            )
+        source_embeddings = {
+            name: self.tensors[name][condition_index].unsqueeze(0).to(device)
+            for name in ["text", "image", "audio"]
+        }
         gallery_indices = [
             gallery_index for gallery_index, record in enumerate(self.records) if record["split"] == "train"
         ]
         gallery = self.tensors["video"][gallery_indices].to(device)
-        scores = F.normalize(initial.float(), dim=-1) @ F.normalize(gallery.float(), dim=-1).T
-        values, indices = scores[0].topk(min(self.args.top_k, len(gallery_indices)))
-        references = gather_reference_embeddings(gallery, indices)
-        reference_metadata = [
-            {
-                "sample_id": self.records[gallery_indices[int(reference_index)]]["sample_id"],
-                "caption": self.records[gallery_indices[int(reference_index)]]["caption"],
-                "score": float(values[position]),
-            }
-            for position, reference_index in enumerate(indices)
-        ]
         image = Image.open(row["image_path"]).convert("RGB")
         with torch.no_grad():
+            full_embeddings = {**embeddings, "audio": source_embeddings["audio"]}
             full = self.conditioner(
                 prompt=row["caption"],
                 image_condition=image,
-                modality_embeddings=embeddings,
-                reference_embeddings=references,
-                reference_scores=values.unsqueeze(0),
-                metadata={"sample_id": row["sample_id"]},
+                modality_embeddings=full_embeddings,
+                temporal_audio_embeddings=(
+                    self.tensors["audio_temporal"][condition_index].unsqueeze(0).to(device)
+                    if "audio_temporal" in self.tensors
+                    else None
+                ),
+                reference_gallery=gallery,
+                retrieval_modality_embeddings=source_embeddings,
+                reference_top_k=self.args.top_k,
+                reference_exclude_indices=torch.tensor([-1], device=device),
+                metadata={
+                    "sample_id": row["sample_id"],
+                    "condition_source_sample_id": condition_row["sample_id"],
+                },
             )
             no_audio_reference = self.conditioner(
                 prompt=row["caption"],
@@ -133,6 +176,16 @@ class AblationGenerator:
                 reference_scores=None,
                 metadata={"sample_id": row["sample_id"]},
             )
+        retrieved = full.metadata.get("reference_indices")
+        reference_metadata = []
+        if isinstance(retrieved, torch.Tensor):
+            reference_metadata = [
+                {
+                    "sample_id": self.records[gallery_indices[int(reference_index)]]["sample_id"],
+                    "caption": self.records[gallery_indices[int(reference_index)]]["caption"],
+                }
+                for reference_index in retrieved[0]
+            ]
         no_audio_reference.condition_tokens = no_audio_reference.condition_tokens[:, :3]
         baseline = ConditionBundle(prompt=row["caption"], image=image)
         rewritten = ConditionBundle(prompt=rewrite_prompt(row["caption"], reference_metadata), image=image)
@@ -144,10 +197,11 @@ class AblationGenerator:
         }, reference_metadata
 
     def run_variant(self, row, variant, bundle, references, output_dir):
-        if variant in {"B0", "B1"}:
-            self.generator.pipeline.disable_lora()
-        else:
+        lora_enabled = variant_uses_lora(variant, self.args.enable_token_lora)
+        if lora_enabled:
             self.generator.pipeline.enable_lora()
+        else:
+            self.generator.pipeline.disable_lora()
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats()
         start = time.perf_counter()
@@ -161,8 +215,16 @@ class AblationGenerator:
             "pair_id": row["pair_id"],
             "sample_id": row["sample_id"],
             "variant": variant,
+            "lora_enabled": lora_enabled,
             "generation_seed": int(row["generation_seed"]),
             "condition_scale": float(bundle.metadata.get("condition_scale", 1.0)),
+            "condition_token_groups": bundle.metadata.get("condition_token_groups", "full"),
+            "effective_condition_scale": float(
+                bundle.metadata.get("effective_condition_scale", 1.0)
+            ),
+            "condition_source_sample_id": bundle.metadata.get(
+                "condition_source_sample_id", row["sample_id"]
+            ),
             "caption": row["caption"],
             "input_audio_path": row["input_audio_path"],
             "generated_video_path": str(video_path),
@@ -189,6 +251,23 @@ def parse_args():
     parser.add_argument("--steps", type=int, default=4)
     parser.add_argument("--top-k", type=int, default=3)
     parser.add_argument("--condition-scale", type=float, default=1.0)
+    parser.add_argument(
+        "--enable-token-lora",
+        action="store_true",
+        help="Enable the legacy B2/B3 LoRA ablation; frozen AnyFlow is the default.",
+    )
+    parser.add_argument(
+        "--condition-token-groups",
+        choices=TOKEN_GROUPS,
+        default="full",
+        help="Select B3 token groups for attribution tests.",
+    )
+    parser.add_argument(
+        "--shuffle-audio-reference-offset",
+        type=int,
+        default=0,
+        help="Rotate audio and retrieved-reference sources for B3 counterfactual diagnosis.",
+    )
     parser.add_argument("--variants", nargs="+", choices=VARIANTS, default=list(VARIANTS))
     parser.add_argument("--num-partitions", type=int, default=1)
     parser.add_argument("--partition-index", type=int, default=0)
@@ -200,6 +279,8 @@ def main():
     if args.num_partitions < 1 or not 0 <= args.partition_index < args.num_partitions:
         raise ValueError("partition-index must be in [0, num-partitions)")
     rows = read_jsonl(args.eval_manifest)[args.partition_index :: args.num_partitions]
+    if args.shuffle_audio_reference_offset and args.variants != ["B3"]:
+        raise ValueError("shuffled-condition diagnosis must be generated with --variants B3")
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     result_path = output_dir / f"results-part-{args.partition_index}.jsonl"
@@ -214,9 +295,13 @@ def main():
             }
     backend = AblationGenerator(args)
     with result_path.open("a", encoding="utf-8") as handle:
-        for row in rows:
-            bundles, references = backend.conditions(row)
+        for row_index, row in enumerate(rows):
+            condition_row = shifted_condition_row(
+                rows, row_index, args.shuffle_audio_reference_offset
+            )
+            bundles, references = backend.conditions(row, condition_row=condition_row)
             bundles = apply_condition_scale(bundles, args.condition_scale)
+            bundles = select_condition_token_groups(bundles, args.condition_token_groups)
             for variant in args.variants:
                 if (row["pair_id"], variant) in complete:
                     continue

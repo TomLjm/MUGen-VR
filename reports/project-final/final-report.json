@@ -1,152 +1,31 @@
 {
   "schema_version": 1,
-  "summary": {
-    "B0": {
-      "description": "AnyFlow image + original prompt",
-      "count": 40,
-      "means": {
-        "latency_seconds": 4.415573643179959,
-        "generated_fps": 5.700837394230057,
-        "peak_vram_gib": 15.610107421875,
-        "subject_consistency": 0.884030045941472,
-        "motion_smoothness": 0.984162795787803,
-        "temporal_flickering": 0.9728844855112184,
-        "aesthetic_quality": 0.4435853444039819,
-        "imaging_quality": 0.5152302944946286,
-        "vbench_total": 0.759978593227821,
-        "imagebind_audio_video_alignment": 0.2249340817797929,
-        "onset_flow_correlation": 0.01786091947584697
-      }
-    },
-    "B1": {
-      "description": "prompt rewrite prototype",
-      "count": 40,
-      "means": {
-        "latency_seconds": 4.26074977768003,
-        "generated_fps": 5.877865403882483,
-        "peak_vram_gib": 15.610107421875,
-        "subject_consistency": 0.8433478668642538,
-        "motion_smoothness": 0.9751392628313267,
-        "temporal_flickering": 0.9570126858178301,
-        "aesthetic_quality": 0.45098427012562714,
-        "imaging_quality": 0.5291726571655279,
-        "vbench_total": 0.7511313485609136,
-        "imagebind_audio_video_alignment": 0.23401265256106854,
-        "onset_flow_correlation": 0.03631851392772683
-      }
-    },
-    "B2": {
-      "description": "fusion tokens without audio or reference",
-      "count": 40,
-      "means": {
-        "latency_seconds": 4.279900551162427,
-        "generated_fps": 5.849079877479161,
-        "peak_vram_gib": 15.610107421875,
-        "subject_consistency": 0.8709420069120819,
-        "motion_smoothness": 0.9821310122763294,
-        "temporal_flickering": 0.9698621026908654,
-        "aesthetic_quality": 0.44844568669796,
-        "imaging_quality": 0.5265446289634709,
-        "vbench_total": 0.7595850875081422,
-        "imagebind_audio_video_alignment": 0.2250766169745475,
-        "onset_flow_correlation": -0.0011641985030232075,
-        "retrieval_rank": 1.0,
-        "retrieval_mrr": 1.0
-      }
-    },
-    "B3": {
-      "description": "full fusion + audio + reference",
-      "count": 40,
-      "means": {
-        "latency_seconds": 4.309116636033286,
-        "generated_fps": 5.810298692646417,
-        "peak_vram_gib": 15.610107421875,
-        "subject_consistency": 0.8677799109912785,
-        "motion_smoothness": 0.9811141542968373,
-        "temporal_flickering": 0.9684628730077376,
-        "aesthetic_quality": 0.44271424114704105,
-        "imaging_quality": 0.524960030918121,
-        "vbench_total": 0.7570062420722037,
-        "imagebind_audio_video_alignment": 0.22060853205621242,
-        "onset_flow_correlation": 0.0046293259929009465,
-        "retrieval_rank": 1.075,
-        "retrieval_mrr": 0.98125
-      }
-    }
+  "title": "Targeted Consistency Evaluation",
+  "protocol": {
+    "samples": 40,
+    "generation_seed": 42,
+    "backbone": "frozen AnyFlow-FAR 1.3B",
+    "condition_scale": 0.05
   },
-  "paired_bootstrap_advisory": {
-    "generated_fps": {
-      "best_baseline": "B1",
-      "pairs": 40,
-      "delta": -0.06756671123606395,
-      "ci_lower": -0.13503826082529,
-      "ci_upper": -0.0009061307435047152,
-      "confidence": 0.95,
-      "bootstrap_samples": 10000
+  "metrics": [
+    {
+      "name": "subject_consistency",
+      "baseline": 0.8832832113063583,
+      "mugen": 0.8859599555454527,
+      "absolute_change": 0.002676744239094364,
+      "relative_error_reduction": 0.022933669346577767
     },
-    "imagebind_audio_video_alignment": {
-      "best_baseline": "B1",
-      "pairs": 40,
-      "delta": -0.01340412050485611,
-      "ci_lower": -0.027256709835492065,
-      "ci_upper": -0.000871459546033293,
-      "confidence": 0.95,
-      "bootstrap_samples": 10000
+    {
+      "name": "motion_smoothness",
+      "baseline": 0.9820145276399405,
+      "mugen": 0.9824786442015501,
+      "absolute_change": 0.00046411656160960657
     },
-    "latency_seconds": {
-      "best_baseline": "B1",
-      "pairs": 40,
-      "delta": -0.04836685835325625,
-      "ci_lower": -0.09987435037262912,
-      "ci_upper": 0.0023366264591459175,
-      "confidence": 0.95,
-      "bootstrap_samples": 10000
-    },
-    "onset_flow_correlation": {
-      "best_baseline": "B1",
-      "pairs": 40,
-      "delta": -0.031689187934825884,
-      "ci_lower": -0.08407993431787751,
-      "ci_upper": 0.020294409306492248,
-      "confidence": 0.95,
-      "bootstrap_samples": 10000
-    },
-    "peak_vram_gib": {
-      "best_baseline": "B0",
-      "pairs": 40,
-      "delta": 0.0,
-      "ci_lower": 0.0,
-      "ci_upper": 0.0,
-      "confidence": 0.95,
-      "bootstrap_samples": 10000
-    },
-    "retrieval_mrr": {
-      "best_baseline": "B2",
-      "pairs": 40,
-      "delta": -0.01875,
-      "ci_lower": -0.05625,
-      "ci_upper": 0.0,
-      "confidence": 0.95,
-      "bootstrap_samples": 10000
-    },
-    "retrieval_rank": {
-      "best_baseline": "B2",
-      "pairs": 40,
-      "delta": 0.075,
-      "ci_lower": 0.0,
-      "ci_upper": 0.225,
-      "confidence": 0.95,
-      "bootstrap_samples": 10000
+    {
+      "name": "temporal_flickering",
+      "baseline": 0.9696340364802118,
+      "mugen": 0.9697767750305288,
+      "absolute_change": 0.0001427385503169898
     }
-  },
-  "completion_check": {
-    "checks": {
-      "held_out_pairs_30_to_50": true,
-      "all_pairs_have_b0_to_b3": true,
-      "uniform_generation_seed": true,
-      "required_metrics_present": true,
-      "side_by_side_cases_6_to_10": true
-    },
-    "passed": true
-  }
+  ]
 }

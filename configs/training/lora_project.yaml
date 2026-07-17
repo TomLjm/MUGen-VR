@@ -11,19 +11,32 @@ training:
   batch_size: 1
   learning_rate: 5.0e-5
   weight_decay: 0.01
-  max_steps: 300
+  max_steps: 50
   gradient_accumulation_steps: 2
   mixed_precision: bf16
   gradient_checkpointing: true
   grad_clip: 1.0
   num_train_timesteps: 1000
-  checkpoint_interval: 50
-  output_dir: outputs/lora-project-v1
+  checkpoint_interval: 10
+  output_dir: outputs/lora-project-v4-quality-preserving
+  lora_learning_rate: 5.0e-6
+  conditioner_learning_rate: 5.0e-5
+  condition_scale_min: 0.05
+  condition_scale_max: 0.20
+  validation_condition_scale: 0.10
+  validation_samples: 16
+  counterfactual_weight: 0.5
+  counterfactual_margin: 0.05
+  rhythm_weight: 0.05
 
 data:
-  feature_store: cache/features/msrvtt-real-v1
+  feature_store: cache/features/msrvtt-real-temporal-v2
   num_frames: 25
   height: 256
   width: 448
   latent_chunk_size: 2
   reference_top_k: 3
+  sync_threshold: 0.10
+  sync_audits:
+    - reports/data-audit/train-audio-motion-all.json
+    - reports/data-audit/val-audio-motion-all.json

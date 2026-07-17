@@ -30,14 +30,20 @@ def test_space_builder_copies_fixed_pair_and_summarizes_gates(tmp_path):
         },
     ]
     report = {
-        "summary": {
-            variant: {"means": {"vbench_total": 0.5}} for variant in ("B0", "B1", "B2", "B3")
-        }
+        "protocol": {"samples": 1, "generation_seed": 42},
+        "metrics": [
+            {"name": "subject_consistency", "baseline": 0.8, "mugen": 0.82}
+        ],
     }
     cases = [{"pair_id": "test:1", "caption": "case", "generation_seed": 42}]
 
-    payload = MODULE.build_space(rows, report, cases, tmp_path / "space", {})
+    output = tmp_path / "space"
+    (output / "assets").mkdir(parents=True)
+    (output / "assets" / "stale.mp4").write_bytes(b"stale")
+    payload = MODULE.build_space(rows, report, cases, output, {})
 
     assert payload["status"] == "held-out-evaluation-complete"
+    assert payload["metrics"] == report["metrics"]
     assert payload["cases"][0]["gates"] == [0.4, 0.6]
     assert (tmp_path / "space" / payload["cases"][0]["b0_video"]).read_bytes() == b"b0"
+    assert not (output / "assets" / "stale.mp4").exists()
