@@ -22,6 +22,7 @@ are projected into the 4096-dimensional UMT5 space and appended to `prompt_embed
 The release contains only project-owned lightweight artifacts:
 
 - Fusion, Reference Adapter, condition projector, and modality/type embeddings.
+- Sharded safetensors weights with a standard tensor-to-shard index.
 - Sanitized training configuration, evaluation metadata, and checksums.
 
 It excludes AnyFlow, ImageBind, and InternVideo2 weights, MSR-VTT media, cached features,

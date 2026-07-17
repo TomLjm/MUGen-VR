@@ -9,9 +9,35 @@ import json
 import shutil
 from pathlib import Path
 
+import torch
+from huggingface_hub import split_torch_state_dict_into_shards
+from safetensors.torch import save_file
 
-CONDITIONER_FILE = "conditioner.pt"
+
+CONDITIONER_INDEX = "conditioner.safetensors.index.json"
 LORA_FILE = "pytorch_lora_weights.safetensors"
+
+
+def save_conditioner_shards(source, output, max_shard_size="8MB"):
+    state = torch.load(source, map_location="cpu", weights_only=True)
+    split = split_torch_state_dict_into_shards(
+        state,
+        filename_pattern="conditioner{suffix}.safetensors",
+        max_shard_size=max_shard_size,
+    )
+    for stale in output.glob("conditioner*.safetensors"):
+        stale.unlink()
+    for filename, tensor_names in split.filename_to_tensors.items():
+        save_file(
+            {name: state[name].contiguous() for name in tensor_names},
+            output / filename,
+        )
+    index = {"metadata": split.metadata, "weight_map": split.tensor_to_filename}
+    (output / CONDITIONER_INDEX).write_text(json.dumps(index, indent=2), encoding="utf-8")
+    stale_pt = output / "conditioner.pt"
+    if stale_pt.exists():
+        stale_pt.unlink()
+    return sorted(split.filename_to_tensors)
 
 
 def sha256(path):
@@ -32,19 +58,18 @@ def package_model(
     condition_token_count=15,
     temporal_audio_tokens=8,
     license_path=None,
+    max_shard_size="8MB",
 ):
     checkpoint = Path(checkpoint)
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     state = json.loads((checkpoint / "training_state.json").read_text(encoding="utf-8"))
-    weight_files = [CONDITIONER_FILE]
+    source = checkpoint / "conditioner.pt"
+    if not source.is_file():
+        raise FileNotFoundError(f"required MUGen weight is missing: {source}")
+    save_conditioner_shards(source, output, max_shard_size=max_shard_size)
     if include_lora:
-        weight_files.append(LORA_FILE)
-    for filename in weight_files:
-        source = checkpoint / filename
-        if not source.is_file():
-            raise FileNotFoundError(f"required MUGen weight is missing: {source}")
-        shutil.copy2(source, output / filename)
+        shutil.copy2(checkpoint / LORA_FILE, output / LORA_FILE)
     stale_lora = output / LORA_FILE
     if not include_lora and stale_lora.exists():
         stale_lora.unlink()
@@ -102,6 +127,7 @@ def main():
     parser.add_argument("--condition-token-count", type=int, default=15)
     parser.add_argument("--temporal-audio-tokens", type=int, default=8)
     parser.add_argument("--license", default="LICENSE")
+    parser.add_argument("--max-shard-size", default="8MB")
     args = parser.parse_args()
     manifest = package_model(
         args.checkpoint,
@@ -113,6 +139,7 @@ def main():
         args.condition_token_count,
         args.temporal_audio_tokens,
         args.license,
+        args.max_shard_size,
     )
     print(json.dumps({"output": args.output, "files": manifest["files"]}))
 

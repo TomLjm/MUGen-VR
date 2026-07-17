@@ -2,6 +2,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+import torch
+
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "release" / "package_hf_model.py"
 SPEC = importlib.util.spec_from_file_location("package_hf_model", SCRIPT)
@@ -12,7 +14,7 @@ SPEC.loader.exec_module(MODULE)
 def test_hf_package_is_whitelist_only(tmp_path):
     checkpoint = tmp_path / "checkpoint"
     checkpoint.mkdir()
-    (checkpoint / "conditioner.pt").write_bytes(b"conditioner")
+    torch.save({"conditioner.weight": torch.ones(4)}, checkpoint / "conditioner.pt")
     (checkpoint / "pytorch_lora_weights.safetensors").write_bytes(b"lora")
     (checkpoint / "optimizer.pt").write_bytes(b"must-not-copy")
     state = {
@@ -41,7 +43,8 @@ def test_hf_package_is_whitelist_only(tmp_path):
     assert {item["name"] for item in manifest["files"]} == {
         "README.md",
         "LICENSE",
-        "conditioner.pt",
+        "conditioner.safetensors",
+        "conditioner.safetensors.index.json",
         "evaluation.json",
         "mugen_config.json",
     }
@@ -55,7 +58,7 @@ def test_hf_package_is_whitelist_only(tmp_path):
 def test_hf_package_can_include_legacy_lora(tmp_path):
     checkpoint = tmp_path / "checkpoint"
     checkpoint.mkdir()
-    (checkpoint / "conditioner.pt").write_bytes(b"conditioner")
+    torch.save({"conditioner.weight": torch.ones(4)}, checkpoint / "conditioner.pt")
     (checkpoint / "pytorch_lora_weights.safetensors").write_bytes(b"lora")
     state = {
         "step": 1,

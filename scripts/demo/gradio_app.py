@@ -18,6 +18,7 @@ from mugen.common.interfaces import ConditionBundle
 from mugen.data.feature_store import load_feature_store
 from mugen.encoders import ImageBindEncoder, TEMPORAL_AUDIO_DIM, extract_temporal_audio_features
 from mugen.generation.conditioner import MultimodalConditioner
+from mugen.generation.checkpoints import load_conditioner_state
 from mugen.generation.generators.anyflow_generator import AnyFlowVideoGenerator
 
 
@@ -53,11 +54,8 @@ class MUGenDemo:
             num_reference_tokens=4,
             temporal_audio_dim=TEMPORAL_AUDIO_DIM * 8,
         ).to(self.generator.device)
-        conditioner_path = Path(args.checkpoint) / "conditioner.pt"
-        if not conditioner_path.is_file():
-            raise FileNotFoundError(f"conditioner checkpoint missing: {conditioner_path}")
         self.conditioner.load_state_dict(
-            torch.load(conditioner_path, map_location=self.generator.device, weights_only=True)
+            load_conditioner_state(args.checkpoint, device=self.generator.device)
         )
         self.conditioner.eval()
         if args.enable_lora:
