@@ -1,5 +1,6 @@
 # MUGen-VR
 
+[简体中文](README.zh-CN.md)
 Multimodal condition-token injection and retrieval-augmented video generation on AnyFlow.
 
 [Hugging Face Model](https://huggingface.co/TomLjm/MUGen-VR-AnyFlow-Conditioner) | [Evaluation Space](https://huggingface.co/spaces/TomLjm/MUGen-VR-Evaluation)
